@@ -97,13 +97,14 @@ def run_agent_stream():
         agent_thread.start()
 
         # Stream responses
+        import json
         def generate():
             while True:
                 item = output_queue.get()
                 if item is None:  # End of stream
-                    yield f"data: {{'done': true}}\n\n"
+                    yield f"data: {json.dumps({'done': True})}\n\n"
                     break
-                yield f"data: {repr(item)}\n\n"
+                yield f"data: {json.dumps({'text': item})}\n\n"
 
         return Response(
             stream_with_context(generate()),
@@ -127,6 +128,16 @@ def get_models():
             "id": "gpt-4-turbo",
             "name": "GPT-4 Turbo",
             "description": "Fast and powerful",
+        },
+        {
+            "id": "gpt-4.1-mini",
+            "name": "GPT-4.1 Mini",
+            "description": "Lightweight and efficient",
+        },
+        {
+            "id": "gpt-4.1-nano",
+            "name": "GPT-4.1 Nano",
+            "description": "Ultra-lightweight model",
         },
         {
             "id": "gpt-4o-mini",

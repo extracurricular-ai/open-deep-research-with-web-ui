@@ -255,6 +255,8 @@
                         <select id="modelSelect" required>
                             <option value="o1">OpenAI o1</option>
                             <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                            <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+                            <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
                             <option value="gpt-4o-mini">GPT-4o Mini</option>
                             <option value="ollama/mistral">Ollama Mistral (Local)</option>
                             <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
@@ -374,9 +376,10 @@
                     for (let i = 0; i < lines.length - 1; i++) {
                         const line = lines[i];
                         if (line.startsWith('data: ')) {
-                            const data = line.slice(6);
+                            const jsonStr = line.slice(6);
                             try {
-                                const jsonData = JSON.parse(data);
+                                const jsonData = JSON.parse(jsonStr);
+
                                 if (jsonData.done) {
                                     // Extract final answer if present
                                     const finalAnswerMatch = outputDiv.textContent.match(
@@ -386,16 +389,15 @@
                                         answerText.textContent = finalAnswerMatch[1].trim();
                                         answerBox.style.display = 'block';
                                     }
+                                } else if (jsonData.text) {
+                                    // Append the text to output
+                                    outputDiv.textContent += jsonData.text;
+                                    outputDiv.classList.remove('empty');
+                                    // Auto-scroll to bottom
+                                    outputDiv.scrollTop = outputDiv.scrollHeight;
                                 }
                             } catch (e) {
-                                // If not JSON, try parsing as string
-                                try {
-                                    const text = JSON.parse(data);
-                                    outputDiv.textContent += text;
-                                    outputDiv.scrollTop = outputDiv.scrollHeight;
-                                } catch (e2) {
-                                    // Ignore parse errors
-                                }
+                                console.error('Failed to parse:', jsonStr, e);
                             }
                         }
                     }
