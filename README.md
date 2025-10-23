@@ -18,29 +18,52 @@ git clone https://github.com/huggingface/smolagents.git
 cd smolagents/examples/open_deep_research
 ```
 
-### Install dependencies
+### Install system dependencies
 
-Run the following command to install the required dependencies from the `requirements.txt` file:
+The project uses `pydub` and `SpeechRecognition` which require **FFmpeg** for audio processing and format conversion.
+
+**Install FFmpeg:**
+
+- **macOS**: `brew install ffmpeg`
+- **Linux**: `sudo apt-get install ffmpeg`
+- **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) or `choco install ffmpeg`
+
+Verify installation: `ffmpeg -version`
+
+### Create virtual environment and install dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
 ```
 
-### Install the development version of `smolagents`
+For development tools (testing, linting, type checking):
 
 ```bash
-pip install -e ../../.[dev]
+pip install -e ".[dev]"
 ```
 
 ### Set up environment variables
 
-The agent uses the `GoogleSearchTool` for web search, which requires an environment variable with the corresponding API key, based on the selected provider:
-- `SERPAPI_API_KEY` for SerpApi: [Sign up here to get a key](https://serpapi.com/users/sign_up)
-- `SERPER_API_KEY` for Serper: [Sign up here to get a key](https://serper.dev/signup)
+Create a `.env` file from the `.env.example` template and configure the following variables:
 
-Depending on the model you want to use, you may need to set environment variables.
-For example, to use the default `o1` model, you need to set the `OPENAI_API_KEY` environment variable.
-[Sign up here to get a key](https://platform.openai.com/signup).
+**Required:**
+- `OPENAI_API_KEY` - For the visual QA tool (image analysis) and if using OpenAI models
+  - [Sign up here to get a key](https://platform.openai.com/signup)
+
+**Optional:**
+- `HF_TOKEN` - Only required for `run_gaia.py` (for downloading datasets)
+  - [Get your token here](https://huggingface.co/settings/tokens)
+
+**Web search:**
+The project uses `DuckDuckGoSearchTool` by default (no API key required). If you want to use alternative search providers, you can modify the tool configuration in `run.py`.
+
+**Model selection:**
+Depending on the model you want to use, set the corresponding environment variables:
+- For `o1` model (default): `OPENAI_API_KEY` required
+- For other OpenAI-compatible models: Follow the provider's documentation
+- For local models (Ollama, LM Studio): No API key required
 
 > [!WARNING]
 > The use of the default `o1` model is restricted to tier-3 access: https://help.openai.com/en/articles/10362446-api-access-to-o1-and-o3-mini
@@ -48,9 +71,23 @@ For example, to use the default `o1` model, you need to set the `OPENAI_API_KEY`
 
 ## Usage
 
-Then you're good to go! Run the run.py script, as in:
+Make sure your virtual environment is activated and environment variables are set, then run:
+
 ```bash
 python run.py --model-id "o1" "Your question here!"
+```
+
+Or use other models via LiteLLM:
+
+```bash
+python run.py --model-id "ollama/mistral" "Your question here!"
+python run.py --model-id "claude-3-5-sonnet-20241022" "Your question here!"
+```
+
+For the GAIA benchmark evaluation:
+
+```bash
+python run_gaia.py --model-id "o1" --run-name my-run
 ```
 
 ## Full reproducibility of results
