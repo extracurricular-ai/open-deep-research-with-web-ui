@@ -71,7 +71,9 @@ Depending on the model you want to use, set the corresponding environment variab
 
 ## Usage
 
-Make sure your virtual environment is activated and environment variables are set, then run:
+Make sure your virtual environment is activated and environment variables are set.
+
+### Command Line Interface
 
 ```bash
 python run.py --model-id "o1" "Your question here!"
@@ -83,6 +85,31 @@ Or use other models via LiteLLM:
 python run.py --model-id "ollama/mistral" "Your question here!"
 python run.py --model-id "claude-3-5-sonnet-20241022" "Your question here!"
 ```
+
+### Web UI (Recommended)
+
+Start the web server:
+
+```bash
+python web_app.py
+```
+
+Then open your browser to `http://localhost:5000`
+
+The web UI provides:
+- 🎨 Modern, responsive interface
+- 📝 Question input form
+- 🤖 Model selection dropdown
+- 📊 Real-time output display
+- ✨ Highlighted final answers
+
+You can also customize the server:
+
+```bash
+python web_app.py --port 8000 --host 0.0.0.0
+```
+
+### GAIA Benchmark Evaluation
 
 For the GAIA benchmark evaluation:
 
