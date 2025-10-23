@@ -19,8 +19,11 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 100%;
+            width: 100%;
             margin: 0 auto;
+            padding: 0 20px;
+            box-sizing: border-box;
         }
 
         header {
@@ -43,15 +46,9 @@
 
         .main-content {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 20px;
             margin-bottom: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
         }
 
         .panel {
@@ -59,6 +56,9 @@
             border-radius: 10px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             padding: 30px;
+            width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
         }
 
         .panel h2 {
@@ -152,7 +152,7 @@
             padding: 20px;
             border-radius: 8px;
             overflow-y: auto;
-            max-height: 600px;
+            max-height: 800px;
             font-size: 0.95em;
             line-height: 1.6;
         }
@@ -329,6 +329,17 @@
         .output-item.error::before {
             content: '✗ ';
             margin-right: 8px;
+        }
+
+        /* Code Block */
+        .output-item.code_block {
+            margin-left: 20px;
+        }
+
+        .output-item.code_block .collapsible-header::before {
+            content: '</>';
+            font-size: 1em;
+            font-weight: bold;
         }
 
         /* Code Execution */
@@ -513,6 +524,10 @@
                         argsDiv.textContent = JSON.stringify(data.arguments, null, 2);
                         item.appendChild(argsDiv);
                     }
+                    break;
+
+                case 'code_block':
+                    item = createCollapsibleSection('Code', data.content, 'code_block', false);
                     break;
 
                 case 'plan':
