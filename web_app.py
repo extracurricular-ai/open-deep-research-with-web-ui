@@ -154,6 +154,16 @@ def get_models():
             "name": "GPT-4o Mini",
             "description": "Efficient and cost-effective",
         },
+        {
+            "id": "deepseek-chat",
+            "name": "DeepSeek Chat",
+            "description": "Fast chat model from DeepSeek",
+        },
+        {
+            "id": "deepseek-reasoner",
+            "name": "DeepSeek Reasoner",
+            "description": "Reasoning model from DeepSeek",
+        },
         {"id": "ollama/mistral", "name": "Ollama Mistral", "description": "Local model"},
         {
             "id": "claude-3-5-sonnet-20241022",
@@ -166,7 +176,7 @@ def get_models():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=5080)
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--debug", type=bool, default=True)
     args = parser.parse_args()
