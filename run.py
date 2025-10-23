@@ -3,7 +3,6 @@ import os
 import threading
 
 from dotenv import load_dotenv
-from huggingface_hub import login
 from scripts.text_inspector_tool import TextInspectorTool
 from scripts.text_web_browser import (
     ArchiveSearchTool,
@@ -26,7 +25,6 @@ from smolagents import (
 
 
 load_dotenv(override=True)
-login(os.getenv("HF_TOKEN"))
 
 append_answer_lock = threading.Lock()
 
