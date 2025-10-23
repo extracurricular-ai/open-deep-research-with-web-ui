@@ -315,7 +315,7 @@
             statusDiv.className = 'status';
         });
 
-        // Form submission
+        // Form submission with streaming
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -336,7 +336,7 @@
             showStatus('Running agent... This may take a moment.', 'loading');
 
             try {
-                const response = await fetch('/api/run', {
+                const response = await fetch('/api/run/stream', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -347,19 +347,61 @@
                     }),
                 });
 
-                const data = await response.json();
+                if (!response.ok) {
+                    const error = await response.json();
+                    showStatus(`Error: ${error.error}`, 'error');
+                    submitBtn.disabled = false;
+                    return;
+                }
 
-                if (data.success) {
-                    outputDiv.textContent = data.output;
-                    answerText.textContent = data.answer;
-                    answerBox.style.display = 'block';
-                    showStatus('✓ Completed successfully!', 'success');
-                } else {
-                    outputDiv.textContent = data.output || '';
-                    showStatus(
-                        `Error: ${data.error || 'Unknown error occurred'}`,
-                        'error'
-                    );
+                // Stream the response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        showStatus('✓ Completed successfully!', 'success');
+                        break;
+                    }
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+
+                    // Process complete lines
+                    for (let i = 0; i < lines.length - 1; i++) {
+                        const line = lines[i];
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            try {
+                                const jsonData = JSON.parse(data);
+                                if (jsonData.done) {
+                                    // Extract final answer if present
+                                    const finalAnswerMatch = outputDiv.textContent.match(
+                                        /✓ Final Answer: ([\s\S]*?)$/
+                                    );
+                                    if (finalAnswerMatch) {
+                                        answerText.textContent = finalAnswerMatch[1].trim();
+                                        answerBox.style.display = 'block';
+                                    }
+                                }
+                            } catch (e) {
+                                // If not JSON, try parsing as string
+                                try {
+                                    const text = JSON.parse(data);
+                                    outputDiv.textContent += text;
+                                    outputDiv.scrollTop = outputDiv.scrollHeight;
+                                } catch (e2) {
+                                    // Ignore parse errors
+                                }
+                            }
+                        }
+                    }
+
+                    // Keep the last incomplete line in the buffer
+                    buffer = lines[lines.length - 1];
                 }
             } catch (error) {
                 outputDiv.textContent = `Client Error: ${error.message}`;

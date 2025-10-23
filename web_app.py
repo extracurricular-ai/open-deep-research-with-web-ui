@@ -4,9 +4,10 @@ import os
 import sys
 import threading
 from contextlib import redirect_stdout
+from queue import Queue
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, stream_with_context, Response
 from flask_cors import CORS
 
 from run import create_agent
@@ -16,31 +17,26 @@ load_dotenv(override=True)
 app = Flask(__name__, template_folder="templates")
 CORS(app)
 
-# Store for output capture
-output_buffer = None
+# Queue for streaming output
+output_queue = None
 output_lock = threading.Lock()
 
 
-class OutputCapture:
-    """Captures stdout and stores it for frontend display"""
+class StreamingOutputCapture:
+    """Captures stdout and queues it for streaming to frontend"""
 
-    def __init__(self):
-        self.buffer = io.StringIO()
+    def __init__(self, queue):
+        self.queue = queue
         self.original_stdout = sys.stdout
 
     def write(self, text):
-        self.buffer.write(text)
+        if text.strip():  # Only queue non-empty lines
+            self.queue.put(text)
         self.original_stdout.write(text)  # Also print to console
         sys.stdout.flush()
 
     def flush(self):
         pass
-
-    def get_output(self):
-        return self.buffer.getvalue()
-
-    def reset(self):
-        self.buffer = io.StringIO()
 
 
 @app.route("/")
@@ -49,10 +45,37 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/run", methods=["POST"])
-def run_agent():
-    """API endpoint to run the agent with user question"""
-    global output_buffer
+def run_agent_thread(question, model_id, queue):
+    """Run the agent in a separate thread and stream output"""
+    old_stdout = sys.stdout
+    sys.stdout = StreamingOutputCapture(queue)
+
+    try:
+        # Create and run agent
+        print(f"Using model: {model_id}")
+        print(f"Question: {question}")
+        print("-" * 80)
+
+        agent = create_agent(model_id=model_id)
+        answer = agent.run(question)
+
+        print("-" * 80)
+        print(f"✓ Final Answer: {answer}")
+        queue.put(None)  # Signal end of stream
+
+    except Exception as e:
+        print(f"✗ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        queue.put(None)  # Signal end of stream
+    finally:
+        sys.stdout = old_stdout
+
+
+@app.route("/api/run/stream", methods=["POST"])
+def run_agent_stream():
+    """Streaming API endpoint using Server-Sent Events"""
+    global output_queue
 
     try:
         data = request.json
@@ -62,48 +85,37 @@ def run_agent():
         if not question:
             return jsonify({"error": "Question is required"}), 400
 
-        # Capture output
-        output_buffer = OutputCapture()
-        old_stdout = sys.stdout
+        # Create a new queue for this run
+        output_queue = Queue()
 
-        try:
-            sys.stdout = output_buffer
+        # Start agent in background thread
+        agent_thread = threading.Thread(
+            target=run_agent_thread,
+            args=(question, model_id, output_queue),
+            daemon=True
+        )
+        agent_thread.start()
 
-            # Create and run agent
-            print(f"Using model: {model_id}")
-            print(f"Question: {question}")
-            print("-" * 80)
+        # Stream responses
+        def generate():
+            while True:
+                item = output_queue.get()
+                if item is None:  # End of stream
+                    yield f"data: {{'done': true}}\n\n"
+                    break
+                yield f"data: {repr(item)}\n\n"
 
-            agent = create_agent(model_id=model_id)
-            answer = agent.run(question)
-
-            print("-" * 80)
-            print(f"Final Answer: {answer}")
-
-            # Get all captured output
-            output_text = output_buffer.get_output()
-
-            return jsonify({"success": True, "answer": answer, "output": output_text}), 200
-
-        except Exception as e:
-            error_msg = f"Error: {str(e)}"
-            print(error_msg, file=old_stdout)
-            output_text = output_buffer.get_output() if output_buffer else ""
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": str(e),
-                        "output": output_text,
-                    }
-                ),
-                500,
-            )
-        finally:
-            sys.stdout = old_stdout
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            }
+        )
 
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/models", methods=["GET"])
