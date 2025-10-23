@@ -155,12 +155,12 @@ def get_models():
             "description": "Efficient and cost-effective",
         },
         {
-            "id": "deepseek-chat",
+            "id": "deepseek/deepseek-chat",
             "name": "DeepSeek Chat",
             "description": "Fast chat model from DeepSeek",
         },
         {
-            "id": "deepseek-reasoner",
+            "id": "deepseek/deepseek-reasoner",
             "name": "DeepSeek Reasoner",
             "description": "Reasoning model from DeepSeek",
         },
