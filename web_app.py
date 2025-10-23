@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template, request, stream_with_context,
 from flask_cors import CORS
 
 from run import create_agent
+from output_formatter import OutputFormatter
 
 load_dotenv(override=True)
 
@@ -23,20 +24,28 @@ output_lock = threading.Lock()
 
 
 class StreamingOutputCapture:
-    """Captures stdout and queues it for streaming to frontend"""
+    """Captures stdout, formats it, and queues for streaming to frontend"""
 
     def __init__(self, queue):
         self.queue = queue
         self.original_stdout = sys.stdout
+        self.formatter = OutputFormatter()
 
     def write(self, text):
-        if text.strip():  # Only queue non-empty lines
-            self.queue.put(text)
-        self.original_stdout.write(text)  # Also print to console
+        # Format the output
+        output = self.formatter.add_text(text)
+        if output:
+            self.queue.put(output)
+
+        # Also print to console
+        self.original_stdout.write(text)
         sys.stdout.flush()
 
     def flush(self):
-        pass
+        # Flush any remaining content
+        output = self.formatter.flush()
+        if output:
+            self.queue.put(output)
 
 
 @app.route("/")
@@ -104,7 +113,8 @@ def run_agent_stream():
                 if item is None:  # End of stream
                     yield f"data: {json.dumps({'done': True})}\n\n"
                     break
-                yield f"data: {json.dumps({'text': item})}\n\n"
+                # Item is already a structured dict from the formatter
+                yield f"data: {json.dumps(item)}\n\n"
 
         return Response(
             stream_with_context(generate()),
