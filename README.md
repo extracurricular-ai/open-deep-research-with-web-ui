@@ -94,7 +94,7 @@ Start the web server:
 python web_app.py
 ```
 
-Then open your browser to `http://localhost:5000`
+Then open your browser to `http://localhost:5080`
 
 The web UI provides:
 - 🎨 Modern, responsive interface
