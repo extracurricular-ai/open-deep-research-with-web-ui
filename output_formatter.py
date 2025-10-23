@@ -49,15 +49,14 @@ class OutputFormatter:
         """Detect output type from buffer and return structured data"""
 
         # Check for step headers (━━━━ Step 1 ━━━━)
-        step_match = re.search(r"(━+.*?Step \d+.*?━+)", self.buffer)
+        step_match = re.search(r"━+.*?Step (\d+).*?━+", self.buffer)
         if step_match:
-            step_header = step_match.group(1)
-            step_num = re.search(r"Step (\d+)", step_header)
-            self.buffer = self.buffer[step_match.end() :]
+            step_num = int(step_match.group(1))
+            self.buffer = self.buffer[step_match.end() :].lstrip('\n')
             return {
                 "type": OutputType.STEP_HEADER.value,
-                "content": step_header.strip(),
-                "step_number": int(step_num.group(1)) if step_num else None,
+                "content": f"Step {step_num}",
+                "step_number": step_num,
             }
 
         # Check for tool calls (Calling tool: 'xxx')

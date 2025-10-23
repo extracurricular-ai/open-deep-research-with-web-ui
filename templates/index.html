@@ -148,107 +148,203 @@
         }
 
         #output {
-            background: #1e1e1e;
-            color: #d4d4d4;
+            background: #f5f5f5;
             padding: 20px;
-            border-radius: 6px;
-            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-            font-size: 0.9em;
-            line-height: 1.6;
+            border-radius: 8px;
             overflow-y: auto;
-            max-height: 500px;
+            max-height: 600px;
+            font-size: 0.95em;
+            line-height: 1.6;
         }
 
         #output.empty {
-            color: #888;
+            color: #999;
             font-style: italic;
+            text-align: center;
+            padding: 40px 20px;
         }
 
         .output-item {
             margin-bottom: 12px;
-            padding: 10px;
-            border-radius: 4px;
-            border-left: 3px solid #666;
         }
 
+        /* Step Container */
         .output-item.step_header {
-            background: #2a2a3a;
-            border-left-color: #667eea;
-            padding: 8px 12px;
-            margin: 12px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 16px 0 12px 0;
             font-weight: bold;
-            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
         }
 
+        .output-item.step_header::before {
+            content: '▶';
+            font-size: 1.2em;
+        }
+
+        /* Tool Call Card */
         .output-item.tool_call {
-            background: #2d3a2d;
-            border-left-color: #4caf50;
-            color: #4caf50;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-left: 4px solid #4caf50;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-left: 20px;
         }
 
         .output-item.tool_call .tool-name {
             font-weight: bold;
-            color: #66bb6a;
+            color: #2e7d32;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .output-item.tool_call .tool-name::before {
+            content: '🔧';
+            font-size: 1.1em;
         }
 
         .output-item.tool_call .tool-args {
-            color: #a8d5a8;
-            margin-top: 6px;
-            padding: 4px 8px;
-            background: #1e2d1e;
-            border-radius: 3px;
+            background: #f5f5f5;
+            color: #333;
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Courier New', monospace;
             font-size: 0.85em;
+            border: 1px solid #e0e0e0;
             white-space: pre-wrap;
             word-break: break-word;
+            max-height: 200px;
+            overflow-y: auto;
         }
 
-        .output-item.code_execution {
-            background: #3a2d2d;
-            border-left-color: #ff7043;
-            color: #ff7043;
+        /* Collapsible Sections */
+        .collapsible-section {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            overflow: hidden;
         }
 
-        .output-item.plan {
-            background: #2d3a3a;
-            border-left-color: #29b6f6;
-            color: #80deea;
-            white-space: pre-wrap;
-            word-break: break-word;
+        .collapsible-header {
+            background: #f9f9f9;
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            color: #333;
+            transition: background 0.2s;
+            border-bottom: 1px solid #e0e0e0;
         }
 
-        .output-item.observation {
-            background: #3a3a2d;
-            border-left-color: #ffa726;
-            color: #ffb74d;
-            white-space: pre-wrap;
-            word-break: break-word;
+        .collapsible-header:hover {
+            background: #f0f0f0;
         }
 
-        .output-item.final_answer {
-            background: #2d3a2d;
-            border-left-color: #66bb6a;
-            color: #66bb6a;
-            padding: 12px;
-            font-weight: bold;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-
-        .output-item.error {
-            background: #3a2d2d;
-            border-left-color: #ef5350;
-            color: #ff7043;
-            font-weight: bold;
-        }
-
-        .output-item.separator {
-            color: #666;
+        .collapsible-header .toggle {
             font-size: 0.8em;
-            margin: 16px 0 8px 0;
-            padding: 4px;
+            transition: transform 0.2s;
         }
 
+        .collapsible-header.open .toggle {
+            transform: rotate(90deg);
+        }
+
+        .collapsible-content {
+            padding: 12px 16px;
+            color: #555;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .collapsible-header.open + .collapsible-content {
+            max-height: 500px;
+        }
+
+        .collapsible-content pre {
+            background: #f5f5f5;
+            padding: 10px 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.85em;
+            margin: 0;
+        }
+
+        /* Plan Section */
+        .output-item.plan {
+            margin-left: 20px;
+        }
+
+        .output-item.plan .collapsible-header::before {
+            content: '📋';
+            font-size: 1.1em;
+        }
+
+        /* Observation Section */
+        .output-item.observation .collapsible-header::before {
+            content: '🔍';
+            font-size: 1.1em;
+        }
+
+        /* Final Answer */
+        .output-item.final_answer {
+            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 16px 0;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
+        }
+
+        .output-item.final_answer::before {
+            content: '✓ ';
+            font-size: 1.2em;
+            margin-right: 8px;
+        }
+
+        /* Error */
+        .output-item.error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 12px 16px;
+            border-radius: 6px;
+            color: #c62828;
+            font-weight: bold;
+        }
+
+        .output-item.error::before {
+            content: '✗ ';
+            margin-right: 8px;
+        }
+
+        /* Code Execution */
+        .output-item.code_execution .collapsible-header::before {
+            content: '▶';
+            font-size: 1em;
+        }
+
+        /* Message */
         .output-item.message {
+            background: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            color: #666;
+            border-left: 3px solid #bbb;
+            margin-left: 20px;
             white-space: pre-wrap;
             word-break: break-word;
         }
@@ -398,16 +494,19 @@
         function renderOutput(data) {
             outputDiv.classList.remove('empty');
 
-            const item = document.createElement('div');
-            item.className = `output-item ${data.type}`;
+            let item;
 
             switch (data.type) {
                 case 'step_header':
-                    item.textContent = data.content;
+                    item = document.createElement('div');
+                    item.className = 'output-item step_header';
+                    item.textContent = `Step ${data.step_number}`;
                     break;
 
                 case 'tool_call':
-                    item.innerHTML = `<span class="tool-name">🔧 ${data.tool_name}</span>`;
+                    item = document.createElement('div');
+                    item.className = 'output-item tool_call';
+                    item.innerHTML = `<div class="tool-name">${data.tool_name}</div>`;
                     if (data.arguments) {
                         const argsDiv = document.createElement('div');
                         argsDiv.className = 'tool-args';
@@ -417,37 +516,72 @@
                     break;
 
                 case 'plan':
-                    item.textContent = data.content;
+                    item = createCollapsibleSection('Plan', data.content, 'plan', true);
                     break;
 
                 case 'observation':
-                    item.textContent = data.content;
+                    item = createCollapsibleSection('Search Results', data.content, 'observation', false);
                     break;
 
                 case 'final_answer':
-                    item.innerHTML = `<strong>✓ Final Answer:</strong><br>${data.content}`;
+                    item = document.createElement('div');
+                    item.className = 'output-item final_answer';
+                    item.textContent = data.content;
                     answerText.textContent = data.content;
                     answerBox.style.display = 'block';
                     break;
 
                 case 'error':
-                    item.innerHTML = `<strong>✗ Error:</strong> ${data.content}`;
+                    item = document.createElement('div');
+                    item.className = 'output-item error';
+                    item.textContent = data.content;
                     break;
 
                 case 'code_execution':
-                    item.textContent = data.content;
+                    item = createCollapsibleSection('Code Execution', data.content, 'code_execution', false);
                     break;
 
                 case 'separator':
-                    item.textContent = data.content;
-                    break;
+                    // Skip separators
+                    return;
 
                 case 'message':
                 default:
+                    item = document.createElement('div');
+                    item.className = 'output-item message';
                     item.textContent = data.content;
             }
 
-            outputDiv.appendChild(item);
+            if (item) {
+                outputDiv.appendChild(item);
+            }
+        }
+
+        function createCollapsibleSection(title, content, type, expanded = false) {
+            const section = document.createElement('div');
+            section.className = `output-item ${type} collapsible-section`;
+
+            const header = document.createElement('div');
+            header.className = `collapsible-header ${expanded ? 'open' : ''}`;
+            header.innerHTML = `<span class="toggle">▶</span><span>${title}</span>`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'collapsible-content';
+            contentDiv.innerHTML = `<pre>${escapeHtml(content)}</pre>`;
+
+            header.addEventListener('click', () => {
+                header.classList.toggle('open');
+            });
+
+            section.appendChild(header);
+            section.appendChild(contentDiv);
+            return section;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Clear button
