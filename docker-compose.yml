@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  open-deep-research:
+    build: .
+    container_name: open-deep-research
+    ports:
+      - "5080:5080"
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      # Optional: Persist downloads
+      - ./downloads_folder:/app/downloads_folder
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

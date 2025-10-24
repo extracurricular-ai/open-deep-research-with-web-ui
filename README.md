@@ -169,6 +169,56 @@ The included `gunicorn.conf.py` is pre-configured with:
 - Proper logging and error handling
 - Auto-restart on code changes (during development)
 
+### Docker Deployment
+
+For containerized deployment, use Docker or Docker Compose:
+
+#### Option 1: Docker Compose (Recommended)
+
+```bash
+# 1. Make sure .env file is configured with your API keys
+cp .env.example .env
+# Edit .env with your actual API keys
+
+# 2. Build and run
+docker-compose up -d
+
+# 3. View logs
+docker-compose logs -f
+
+# 4. Stop
+docker-compose down
+```
+
+#### Option 2: Docker Run
+
+```bash
+# Build image
+docker build -t open-deep-research .
+
+# Run with environment variables
+docker run -d \
+  -e OPENAI_API_KEY=your_key_here \
+  -e DEEPSEEK_API_KEY=your_key_here \
+  -e META_SOTA_API_KEY=your_key_here \
+  -e SEARCH_ENGINE=META_SOTA,DDGS \
+  -p 5080:5080 \
+  --name open-deep-research \
+  open-deep-research
+
+# Or use --env-file
+docker run -d \
+  --env-file .env \
+  -p 5080:5080 \
+  --name open-deep-research \
+  open-deep-research
+```
+
+**Important Security Notes:**
+- Never commit `.env` file with real API keys to git
+- Never bake API keys into Docker images
+- Always pass secrets at runtime using `-e` flags or `--env-file`
+
 ### GAIA Benchmark Evaluation
 
 For the GAIA benchmark evaluation:
