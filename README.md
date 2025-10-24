@@ -1,5 +1,7 @@
 # Open Deep Research
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 Adapted from: https://github.com/huggingface/smolagents/tree/main/examples, added ui and simplified config for **USER FRIENDLY** try outs!!
 
 Welcome to this open replication of [OpenAI's Deep Research](https://openai.com/index/introducing-deep-research/)! This agent attempts to replicate OpenAI's model and achieve similar performance on research tasks.
