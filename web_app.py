@@ -4,14 +4,18 @@ import os
 import sys
 import threading
 import uuid
-from contextlib import redirect_stdout
+import signal
+import subprocess
+import json
+import tempfile
+import time
+from pathlib import Path
 from queue import Queue
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, stream_with_context, Response
 from flask_cors import CORS
 
-from run import create_agent
 from output_formatter import OutputFormatter
 
 load_dotenv(override=True)
@@ -19,34 +23,63 @@ load_dotenv(override=True)
 app = Flask(__name__, template_folder="templates")
 CORS(app)
 
-# Session tracking for stop functionality
-active_sessions = {}  # session_id -> {'queue': Queue, 'stop_flag': bool}
+# Session tracking directory (shared across all workers)
+SESSION_DIR = Path(tempfile.gettempdir()) / "open_deep_research_sessions"
+SESSION_DIR.mkdir(exist_ok=True)
+
+# In-memory session tracking for this worker
+active_sessions = {}  # session_id -> {'process': subprocess.Popen, 'queue': Queue}
 sessions_lock = threading.Lock()
 
 
-class StreamingOutputCapture:
-    """Captures stdout, formats it, and queues for streaming to frontend"""
+def write_session_file(session_id, agent_pid, worker_pid):
+    """Write session info to shared file"""
+    session_file = SESSION_DIR / f"{session_id}.json"
+    with open(session_file, 'w') as f:
+        json.dump({
+            'agent_pid': agent_pid,
+            'worker_pid': worker_pid,
+            'created_at': time.time()
+        }, f)
 
-    def __init__(self, queue):
-        self.queue = queue
-        self.original_stdout = sys.stdout
-        self.formatter = OutputFormatter()
 
-    def write(self, text):
-        # Format the output
-        output = self.formatter.add_text(text)
-        if output:
-            self.queue.put(output)
+def read_session_file(session_id):
+    """Read session info from shared file"""
+    session_file = SESSION_DIR / f"{session_id}.json"
+    if session_file.exists():
+        with open(session_file, 'r') as f:
+            return json.load(f)
+    return None
 
-        # Also print to console
-        self.original_stdout.write(text)
-        sys.stdout.flush()
 
-    def flush(self):
+def delete_session_file(session_id):
+    """Delete session file"""
+    session_file = SESSION_DIR / f"{session_id}.json"
+    if session_file.exists():
+        session_file.unlink()
+
+
+def read_process_output(process, queue, formatter):
+    """Read from process stdout and queue formatted output"""
+    try:
+        for line in iter(process.stdout.readline, b''):
+            if line:
+                text = line.decode('utf-8', errors='replace')
+                # Format the output
+                output = formatter.add_text(text)
+                if output:
+                    queue.put(output)
+                # Also print to console
+                print(text, end='')
+
         # Flush any remaining content
-        output = self.formatter.flush()
+        output = formatter.flush()
         if output:
-            self.queue.put(output)
+            queue.put(output)
+    except Exception as e:
+        print(f"Error reading process output: {e}")
+    finally:
+        queue.put(None)  # Signal end of stream
 
 
 @app.route("/")
@@ -55,63 +88,6 @@ def index():
     return render_template("index.html")
 
 
-def run_agent_thread(question, model_id, session_id):
-    """Run the agent in a separate thread and stream output"""
-    with sessions_lock:
-        if session_id not in active_sessions:
-            return  # Session was cancelled before start
-        session = active_sessions[session_id]
-        queue = session['queue']
-
-    old_stdout = sys.stdout
-    sys.stdout = StreamingOutputCapture(queue)
-
-    try:
-        # Check if stopped before starting
-        with sessions_lock:
-            if session['stop_flag']:
-                print("⏹ Execution cancelled before start")
-                queue.put(None)
-                return
-
-        # Create and run agent
-        print(f"Using model: {model_id}")
-        print(f"Question: {question}")
-        print("-" * 80)
-
-        agent = create_agent(model_id=model_id)
-
-        # Check again before running
-        with sessions_lock:
-            if session['stop_flag']:
-                print("⏹ Execution cancelled")
-                queue.put(None)
-                return
-
-        answer = agent.run(question)
-
-        # Check if stopped during execution
-        with sessions_lock:
-            if session['stop_flag']:
-                print("⏹ Execution cancelled")
-                queue.put(None)
-                return
-
-        print("-" * 80)
-        print(f"✓ Final Answer: {answer}")
-        queue.put(None)  # Signal end of stream
-
-    except Exception as e:
-        print(f"✗ Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        queue.put(None)  # Signal end of stream
-    finally:
-        sys.stdout = old_stdout
-        # Clean up session
-        with sessions_lock:
-            if session_id in active_sessions:
-                del active_sessions[session_id]
 
 
 @app.route("/api/run/stream", methods=["POST"])
@@ -129,33 +105,76 @@ def run_agent_stream():
         session_id = str(uuid.uuid4())
         output_queue = Queue()
 
+        # Start agent in subprocess
+        env = os.environ.copy()
+        process = subprocess.Popen(
+            [sys.executable, '-u', 'run.py', question, '--model-id', model_id],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            bufsize=1
+        )
+
+        # Get PIDs
+        agent_pid = process.pid
+        worker_pid = os.getpid()
+
+        # Write session to shared file (accessible by all workers)
+        write_session_file(session_id, agent_pid, worker_pid)
+
+        # Store session in this worker's memory
         with sessions_lock:
             active_sessions[session_id] = {
-                'queue': output_queue,
-                'stop_flag': False
+                'process': process,
+                'queue': output_queue
             }
 
-        # Start agent in background thread
-        agent_thread = threading.Thread(
-            target=run_agent_thread,
-            args=(question, model_id, session_id),
+        # Start thread to read process output
+        formatter = OutputFormatter()
+        reader_thread = threading.Thread(
+            target=read_process_output,
+            args=(process, output_queue, formatter),
             daemon=True
         )
-        agent_thread.start()
+        reader_thread.start()
 
         # Stream responses
-        import json
         def generate():
-            # Send session_id as first message
-            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+            try:
+                # Send session_id as first message
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
 
-            while True:
-                item = output_queue.get()
-                if item is None:  # End of stream
-                    yield f"data: {json.dumps({'done': True})}\n\n"
-                    break
-                # Item is already a structured dict from the formatter
-                yield f"data: {json.dumps(item)}\n\n"
+                while True:
+                    item = output_queue.get()
+                    if item is None:  # End of stream
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                        break
+                    # Item is already a structured dict from the formatter
+                    yield f"data: {json.dumps(item)}\n\n"
+
+            except GeneratorExit:
+                # Client disconnected (closed browser, navigated away, network error)
+                print(f"⚠️ Client disconnected for session {session_id}, cleaning up...")
+
+                # Kill the agent subprocess
+                with sessions_lock:
+                    if session_id in active_sessions:
+                        session = active_sessions[session_id]
+                        process = session.get('process')
+                        if process and process.poll() is None:
+                            try:
+                                process.kill()
+                                process.wait(timeout=1)
+                            except:
+                                pass
+                raise  # Re-raise to properly close the generator
+
+            finally:
+                # Always cleanup (whether completed or disconnected)
+                with sessions_lock:
+                    if session_id in active_sessions:
+                        del active_sessions[session_id]
+                delete_session_file(session_id)
 
         return Response(
             stream_with_context(generate()),
@@ -172,14 +191,41 @@ def run_agent_stream():
 
 @app.route("/api/stop/<session_id>", methods=["POST"])
 def stop_session(session_id):
-    """Stop a running agent session"""
+    """Stop a running agent session by killing both agent and worker processes"""
     try:
-        with sessions_lock:
-            if session_id in active_sessions:
-                active_sessions[session_id]['stop_flag'] = True
-                return jsonify({"success": True, "message": "Stop signal sent"}), 200
-            else:
-                return jsonify({"success": False, "message": "Session not found"}), 404
+        # Read session from shared file (works across workers)
+        session_data = read_session_file(session_id)
+
+        if not session_data:
+            return jsonify({"success": False, "message": "Session not found"}), 404
+
+        agent_pid = session_data['agent_pid']
+        worker_pid = session_data['worker_pid']
+
+        # Kill the agent subprocess
+        try:
+            os.kill(agent_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # Already dead
+
+        # Kill the worker process (Gunicorn will restart it)
+        def kill_worker():
+            time.sleep(0.5)  # Give time to send response
+            try:
+                os.kill(worker_pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass  # Already dead
+
+        threading.Thread(target=kill_worker, daemon=True).start()
+
+        # Cleanup session file
+        delete_session_file(session_id)
+
+        return jsonify({
+            "success": True,
+            "message": "Agent and worker terminated (worker will restart automatically)"
+        }), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

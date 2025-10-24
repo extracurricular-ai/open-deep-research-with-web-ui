@@ -116,7 +116,7 @@ def main():
 
     answer = agent.run(args.question)
 
-    print(f"Got this answer: {answer}")
+    print(f"✓ Final Answer: {answer}")
 
 
 if __name__ == "__main__":

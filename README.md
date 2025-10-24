@@ -88,7 +88,17 @@ python run.py --model-id "claude-3-5-sonnet-20241022" "Your question here!"
 
 ### Web UI (Recommended)
 
-Start the web server:
+The web UI provides:
+- 🎨 Modern, responsive interface
+- 📝 Question input form
+- 🤖 Model selection dropdown
+- 📊 Real-time streaming output with collapsible sections
+- ⏹️ Stop button (kills process immediately)
+- 🔄 Auto-cancellation when submitting new questions
+
+#### Development Mode
+
+Start the development server:
 
 ```bash
 python web_app.py
@@ -96,18 +106,32 @@ python web_app.py
 
 Then open your browser to `http://localhost:5080`
 
-The web UI provides:
-- 🎨 Modern, responsive interface
-- 📝 Question input form
-- 🤖 Model selection dropdown
-- 📊 Real-time output display
-- ✨ Highlighted final answers
-
-You can also customize the server:
+You can customize the server:
 
 ```bash
 python web_app.py --port 8000 --host 0.0.0.0
 ```
+
+#### Production Mode
+
+For production deployments, use Gunicorn:
+
+```bash
+# Install dependencies (including gunicorn)
+pip install -e .
+
+# Run with gunicorn
+gunicorn -c gunicorn.conf.py web_app:app
+
+# Or with custom settings
+gunicorn --bind 0.0.0.0:5080 --workers 4 --timeout 300 web_app:app
+```
+
+The included `gunicorn.conf.py` is pre-configured with:
+- Multi-worker process management
+- 300s timeout for long-running agent tasks
+- Proper logging and error handling
+- Auto-restart on code changes (during development)
 
 ### GAIA Benchmark Evaluation
 
