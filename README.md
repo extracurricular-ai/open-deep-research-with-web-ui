@@ -173,9 +173,28 @@ The included `gunicorn.conf.py` is pre-configured with:
 
 ### Docker Deployment
 
-For containerized deployment, use Docker or Docker Compose:
+For containerized deployment, use Docker or Docker Compose.
 
-#### Option 1: Docker Compose (Recommended)
+**Pre-built images are available on GitHub Container Registry:**
+```bash
+docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
+```
+
+#### Option 1: Using Pre-built Image (Fastest)
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
+
+# Run with environment variables
+docker run -d \
+  --env-file .env \
+  -p 5080:5080 \
+  --name open-deep-research \
+  ghcr.io/s2thend/open-deep-research-with-ui:latest
+```
+
+#### Option 2: Docker Compose (Recommended for Development)
 
 ```bash
 # 1. Make sure .env file is configured with your API keys
@@ -192,10 +211,10 @@ docker-compose logs -f
 docker-compose down
 ```
 
-#### Option 2: Docker Run
+#### Option 3: Build Your Own Image
 
 ```bash
-# Build image
+# Build image locally
 docker build -t open-deep-research .
 
 # Run with environment variables
