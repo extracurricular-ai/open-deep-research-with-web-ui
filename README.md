@@ -18,8 +18,8 @@ To get started, follow the steps below:
 ### Clone the repository
 
 ```bash
-git clone https://github.com/huggingface/smolagents.git
-cd smolagents/examples/open_deep_research
+git clone https://github.com/S2thend/open-deep-research-with-ui.git
+cd open-deep-research-with-ui
 ```
 
 ### Install system dependencies
