@@ -138,6 +138,17 @@
             cursor: not-allowed;
         }
 
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            background: #d32f2f;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(244, 67, 54, 0.4);
+        }
+
         .btn-clear {
             background: #f0f0f0;
             color: #333;
@@ -470,6 +481,7 @@
 
                     <div class="button-group">
                         <button type="submit" class="btn-submit" id="submitBtn">Run Agent</button>
+                        <button type="button" class="btn-stop" id="stopBtn" style="display: none;">Stop</button>
                         <button type="button" class="btn-clear" id="clearBtn">Clear</button>
                     </div>
                 </form>
@@ -497,11 +509,16 @@
         const questionInput = document.getElementById('question');
         const modelSelect = document.getElementById('modelSelect');
         const submitBtn = document.getElementById('submitBtn');
+        const stopBtn = document.getElementById('stopBtn');
         const clearBtn = document.getElementById('clearBtn');
         const outputDiv = document.getElementById('output');
         const statusDiv = document.getElementById('status');
         const answerBox = document.getElementById('answerBox');
         const answerText = document.getElementById('answerText');
+
+        // Track current stream reader for stop functionality
+        let currentReader = null;
+        let isStopped = false;
 
         // Function to render different output types
         function renderOutput(data) {
@@ -601,6 +618,25 @@
             return div.innerHTML;
         }
 
+        // Stop button
+        stopBtn.addEventListener('click', () => {
+            if (currentReader) {
+                isStopped = true;
+                currentReader.cancel();
+                currentReader = null;
+
+                // Add stopped message
+                const stoppedItem = document.createElement('div');
+                stoppedItem.className = 'output-item error';
+                stoppedItem.innerHTML = '<strong>⏹ Stopped:</strong> Agent execution cancelled by user';
+                outputDiv.appendChild(stoppedItem);
+
+                showStatus('⏹ Stopped by user', 'error');
+                submitBtn.disabled = false;
+                stopBtn.style.display = 'none';
+            }
+        });
+
         // Clear button
         clearBtn.addEventListener('click', () => {
             questionInput.value = '';
@@ -624,10 +660,12 @@
             }
 
             // Clear previous output
-            outputDiv.textContent = '';
+            outputDiv.innerHTML = '';
             outputDiv.classList.remove('empty');
             answerBox.style.display = 'none';
             submitBtn.disabled = true;
+            stopBtn.style.display = 'inline-block';
+            isStopped = false;
 
             showStatus('Running agent... This may take a moment.', 'loading');
 
@@ -660,10 +698,15 @@
 
                 // Stream the response
                 const reader = response.body.getReader();
+                currentReader = reader;
                 const decoder = new TextDecoder();
                 let buffer = '';
 
                 while (true) {
+                    if (isStopped) {
+                        break;
+                    }
+
                     const { done, value } = await reader.read();
 
                     if (done) {
@@ -711,6 +754,8 @@
                 outputDiv.scrollTop = outputDiv.scrollHeight;
             } finally {
                 submitBtn.disabled = false;
+                stopBtn.style.display = 'none';
+                currentReader = null;
             }
         });
 
