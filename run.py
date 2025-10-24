@@ -29,6 +29,15 @@ from smolagents import (
 load_dotenv(override=True)
 
 
+class DuckDuckGoSearchToolLabeled(DuckDuckGoSearchTool):
+    """Wrapper around DuckDuckGoSearchTool to add engine label to results"""
+
+    def forward(self, query: str) -> str:
+        result = super().forward(query)
+        # Replace "## Search Results" with "## Search Results (DuckDuckGo)"
+        return result.replace("## Search Results\n\n", "## Search Results (DuckDuckGo)\n\n", 1)
+
+
 class MetaSotaSearchTool(Tool):
     name = "web_search"
     description = "Search the web using MetaSo search engine. Returns search results with title, link, and snippet."
@@ -79,7 +88,7 @@ class MetaSotaSearchTool(Tool):
                 snippet = item.get("content", "No description")
                 results.append(f"|{title}]({link})\n{snippet}\n")
 
-            return "## Search Results\n\n" + "\n".join(results)
+            return "## Search Results (MetaSo)\n\n" + "\n".join(results)
 
         except requests.exceptions.RequestException as e:
             return f"Error performing search: {str(e)}"
@@ -128,7 +137,7 @@ def get_search_tools(max_results=10):
     for engine in engines:
         if engine == "DDGS":
             print(f"📡 Using DuckDuckGo search engine")
-            tools.append(DuckDuckGoSearchTool(max_results=max_results))
+            tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
         elif engine == "META_SOTA":
             api_key = os.getenv("META_SOTA_API_KEY")
             if not api_key:
@@ -141,7 +150,7 @@ def get_search_tools(max_results=10):
 
     if not tools:
         print(f"⚠️  No valid search engines configured, falling back to DuckDuckGo")
-        tools.append(DuckDuckGoSearchTool(max_results=max_results))
+        tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
 
     return tools
 
