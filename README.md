@@ -55,9 +55,30 @@ Create a `.env` file from the `.env.example` template and configure the followin
 **Optional:**
 - `HF_TOKEN` - Only required for `run_gaia.py` (for downloading datasets)
   - [Get your token here](https://huggingface.co/settings/tokens)
+- `META_SOTA_API_KEY` - For MetaSo search engine (alternative to DuckDuckGo)
+  - [Get your API key from MetaSo](https://metaso.cn)
 
-**Web search:**
-The project uses `DuckDuckGoSearchTool` by default (no API key required). If you want to use alternative search providers, you can modify the tool configuration in `run.py`.
+**Search Engine Configuration:**
+
+The project supports multiple search engines via the `SEARCH_ENGINE` environment variable:
+
+- **DuckDuckGo (DDGS)** - Default, no API key required
+  ```bash
+  SEARCH_ENGINE=DDGS
+  ```
+
+- **MetaSo (META_SOTA)** - Requires `META_SOTA_API_KEY`
+  ```bash
+  SEARCH_ENGINE=META_SOTA
+  META_SOTA_API_KEY=your_api_key_here
+  ```
+
+- **Multiple engines with fallback** - Use comma-separated values
+  ```bash
+  SEARCH_ENGINE=META_SOTA,DDGS  # Try MetaSo first, fallback to DuckDuckGo
+  ```
+
+The agent will use the configured search engine(s) in order, with automatic fallback if one fails or is unavailable.
 
 **Model selection:**
 Depending on the model you want to use, set the corresponding environment variables:

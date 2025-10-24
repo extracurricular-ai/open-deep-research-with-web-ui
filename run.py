@@ -1,6 +1,8 @@
 import argparse
 import os
 import threading
+import requests
+import json
 
 from dotenv import load_dotenv
 from scripts.text_inspector_tool import TextInspectorTool
@@ -18,13 +20,71 @@ from scripts.visual_qa import visualizer
 from smolagents import (
     CodeAgent,
     DuckDuckGoSearchTool,
-    # InferenceClientModel,
     LiteLLMModel,
+    Tool,
     ToolCallingAgent,
 )
 
 
 load_dotenv(override=True)
+
+
+class MetaSotaSearchTool(Tool):
+    name = "web_search"
+    description = "Search the web using MetaSo search engine. Returns search results with title, link, and snippet."
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "The search query to look up on the web",
+        }
+    }
+    output_type = "string"
+
+    def __init__(self, api_key: str, max_results: int = 10, **kwargs):
+        super().__init__(**kwargs)
+        self.api_key = api_key
+        self.max_results = max_results
+        self.api_url = "https://metaso.cn/api/v1/search"
+
+    def forward(self, query: str) -> str:
+        """Search the web using MetaSo API"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "q": query,
+            "scope": "webpage",
+            "includeSummary": False,
+            "size": str(self.max_results),
+            "includeRawContent": False,
+            "conciseSnippet": False,
+        }
+
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            # Format results similar to DuckDuckGo output
+            if not data.get("data") or not data["data"].get("results"):
+                return "No results found."
+
+            results = []
+            for item in data["data"]["results"][:self.max_results]:
+                title = item.get("title", "No title")
+                link = item.get("url", "")
+                snippet = item.get("content", "No description")
+                results.append(f"|{title}]({link})\n{snippet}\n")
+
+            return "## Search Results\n\n" + "\n".join(results)
+
+        except requests.exceptions.RequestException as e:
+            return f"Error performing search: {str(e)}"
+        except Exception as e:
+            return f"Unexpected error: {str(e)}"
 
 append_answer_lock = threading.Lock()
 
@@ -55,6 +115,37 @@ BROWSER_CONFIG = {
 os.makedirs(f"./{BROWSER_CONFIG['downloads_folder']}", exist_ok=True)
 
 
+def get_search_tools(max_results=10):
+    """Get search tools based on SEARCH_ENGINE environment variable.
+
+    Returns a list of search tools with fallback support.
+    SEARCH_ENGINE can be: DDGS, META_SOTA, or comma-separated for fallback (e.g., META_SOTA,DDGS)
+    """
+    search_engine = os.getenv("SEARCH_ENGINE", "DDGS")
+    engines = [e.strip() for e in search_engine.split(",")]
+
+    tools = []
+    for engine in engines:
+        if engine == "DDGS":
+            print(f"📡 Using DuckDuckGo search engine")
+            tools.append(DuckDuckGoSearchTool(max_results=max_results))
+        elif engine == "META_SOTA":
+            api_key = os.getenv("META_SOTA_API_KEY")
+            if not api_key:
+                print(f"⚠️  META_SOTA_API_KEY not found, skipping MetaSo search")
+                continue
+            print(f"📡 Using MetaSo search engine")
+            tools.append(MetaSotaSearchTool(api_key=api_key, max_results=max_results))
+        else:
+            print(f"⚠️  Unknown search engine: {engine}, skipping")
+
+    if not tools:
+        print(f"⚠️  No valid search engines configured, falling back to DuckDuckGo")
+        tools.append(DuckDuckGoSearchTool(max_results=max_results))
+
+    return tools
+
+
 def create_agent(model_id="o1"):
     model_params = {
         "model_id": model_id,
@@ -67,8 +158,12 @@ def create_agent(model_id="o1"):
 
     text_limit = 100000
     browser = SimpleTextBrowser(**BROWSER_CONFIG)
+
+    # Get search tools based on environment configuration
+    search_tools = get_search_tools(max_results=10)
+
     WEB_TOOLS = [
-        DuckDuckGoSearchTool(max_results=10),
+        *search_tools,  # Add configured search engine(s)
         VisitTool(browser),
         PageUpTool(browser),
         PageDownTool(browser),
@@ -96,12 +191,22 @@ def create_agent(model_id="o1"):
     If a non-html page is in another format, especially .pdf or a Youtube video, use tool 'inspect_file_as_text' to inspect it.
     Additionally, if after some searching you find out that you need more information to answer the question, you can use `final_answer` with your request for clarification as argument to request for more information."""
 
+    # Restrict imports for security - only allow pure data processing modules
+    # Block file I/O: os, subprocess, shutil, pathlib, io, open
+    # Block network: requests, urllib, http, socket
+    # Block image/file libs: PIL, cv2, imageio
+    safe_imports = [
+        "math", "re", "json", "datetime", "time",
+        "collections", "itertools", "functools", "typing",
+        "statistics", "random", "string", "decimal"
+    ]
+
     manager_agent = CodeAgent(
         model=model,
         tools=[visualizer, TextInspectorTool(model, text_limit)],
         max_steps=12,
         verbosity_level=2,
-        additional_authorized_imports=["*"],
+        additional_authorized_imports=safe_imports,
         planning_interval=4,
         managed_agents=[text_webbrowser_agent],
     )
