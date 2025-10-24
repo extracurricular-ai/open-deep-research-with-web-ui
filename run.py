@@ -78,14 +78,16 @@ class MetaSotaSearchTool(Tool):
             data = response.json()
 
             # Format results similar to DuckDuckGo output
-            if not data.get("data") or not data["data"].get("results"):
+            # MetaSo returns results in 'webpages' array
+            webpages = data.get("webpages", [])
+            if not webpages:
                 return "No results found."
 
             results = []
-            for item in data["data"]["results"][:self.max_results]:
+            for item in webpages[:self.max_results]:
                 title = item.get("title", "No title")
-                link = item.get("url", "")
-                snippet = item.get("content", "No description")
+                link = item.get("link", "")  # MetaSo uses 'link' not 'url'
+                snippet = item.get("snippet", "No description")
                 results.append(f"|{title}]({link})\n{snippet}\n")
 
             return "## Search Results (MetaSo)\n\n" + "\n".join(results)
