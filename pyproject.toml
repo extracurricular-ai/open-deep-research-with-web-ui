@@ -15,9 +15,9 @@ description = ""
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
-    {name = "Author Name", email = "author@example.com"},
+    {name = "borui", email = "borui_cai@qq.com"},
 ]
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 keywords = []
 classifiers = [
     "Development Status :: 3 - Alpha",
