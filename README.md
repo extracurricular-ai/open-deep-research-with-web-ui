@@ -1,5 +1,7 @@
 # Open Deep Research
 
+Adapted from: https://github.com/huggingface/smolagents/tree/main/examples, added ui and simplified config for **USER FRIENDLY** try outs!!
+
 Welcome to this open replication of [OpenAI's Deep Research](https://openai.com/index/introducing-deep-research/)! This agent attempts to replicate OpenAI's model and achieve similar performance on research tasks.
 
 Read more about this implementation's goal and methods in our [blog post](https://huggingface.co/blog/open-deep-research).
@@ -116,6 +118,19 @@ The web UI provides:
 - 📊 Real-time streaming output with collapsible sections
 - ⏹️ Stop button (kills process immediately)
 - 🔄 Auto-cancellation when submitting new questions
+
+**Screenshots:**
+
+<div align="center">
+  <img src="docs/imgs/ui_input.png" alt="Web UI Input" width="800"/>
+  <p><em>Clean input interface with model selection</em></p>
+
+  <img src="docs/imgs/ui_tools_plans.png" alt="Agent Plans and Tools" width="800"/>
+  <p><em>Real-time display of agent reasoning, tool calls, and observations</em></p>
+
+  <img src="docs/imgs/ui_result.png" alt="Final Results" width="800"/>
+  <p><em>Highlighted final answer with collapsible sections</em></p>
+</div>
 
 #### Development Mode
 
