@@ -11,14 +11,11 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements files
-COPY pyproject.toml ./
+# Copy application code first (needed for editable install)
+COPY . .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -e .
-
-# Copy application code
-COPY . .
 
 # Create necessary directories
 RUN mkdir -p downloads_folder templates
