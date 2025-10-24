@@ -186,3 +186,13 @@ The data used in our submissions to GAIA was augmented in this way:
 This process was done manually but could be automatized.
 
 After processing, the annotated was uploaded to a [new dataset](https://huggingface.co/datasets/smolagents/GAIA-annotated). You need to request access (granted instantly).
+
+## License
+
+This project is licensed under the **Apache License 2.0** - the same license as the original [smolagents](https://github.com/huggingface/smolagents) repository to honor the open-source contributions of the HuggingFace team.
+
+See the [LICENSE](LICENSE) file for details.
+
+**Acknowledgments:**
+- Original implementation by HuggingFace [smolagents](https://github.com/huggingface/smolagents)
+- Web UI, process-based architecture, and security enhancements added in this fork
