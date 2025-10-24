@@ -518,6 +518,7 @@
 
         // Track current stream reader for stop functionality
         let currentReader = null;
+        let currentSessionId = null;
         let isStopped = false;
 
         // Function to render different output types
@@ -619,11 +620,23 @@
         }
 
         // Stop button
-        stopBtn.addEventListener('click', () => {
-            if (currentReader) {
+        stopBtn.addEventListener('click', async () => {
+            if (currentReader && currentSessionId) {
                 isStopped = true;
+
+                // Call backend to stop session
+                try {
+                    await fetch(`/api/stop/${currentSessionId}`, {
+                        method: 'POST',
+                    });
+                } catch (error) {
+                    console.error('Error stopping session:', error);
+                }
+
+                // Cancel frontend stream
                 currentReader.cancel();
                 currentReader = null;
+                currentSessionId = null;
 
                 // Add stopped message
                 const stoppedItem = document.createElement('div');
@@ -725,7 +738,10 @@
                             try {
                                 const jsonData = JSON.parse(jsonStr);
 
-                                if (jsonData.done) {
+                                if (jsonData.session_id) {
+                                    // Capture session ID from first message
+                                    currentSessionId = jsonData.session_id;
+                                } else if (jsonData.done) {
                                     // Stream complete
                                     break;
                                 } else {
@@ -756,6 +772,7 @@
                 submitBtn.disabled = false;
                 stopBtn.style.display = 'none';
                 currentReader = null;
+                currentSessionId = null;
             }
         });
 

@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import threading
+import uuid
 from contextlib import redirect_stdout
 from queue import Queue
 
@@ -18,9 +19,9 @@ load_dotenv(override=True)
 app = Flask(__name__, template_folder="templates")
 CORS(app)
 
-# Queue for streaming output
-output_queue = None
-output_lock = threading.Lock()
+# Session tracking for stop functionality
+active_sessions = {}  # session_id -> {'queue': Queue, 'stop_flag': bool}
+sessions_lock = threading.Lock()
 
 
 class StreamingOutputCapture:
@@ -54,19 +55,47 @@ def index():
     return render_template("index.html")
 
 
-def run_agent_thread(question, model_id, queue):
+def run_agent_thread(question, model_id, session_id):
     """Run the agent in a separate thread and stream output"""
+    with sessions_lock:
+        if session_id not in active_sessions:
+            return  # Session was cancelled before start
+        session = active_sessions[session_id]
+        queue = session['queue']
+
     old_stdout = sys.stdout
     sys.stdout = StreamingOutputCapture(queue)
 
     try:
+        # Check if stopped before starting
+        with sessions_lock:
+            if session['stop_flag']:
+                print("⏹ Execution cancelled before start")
+                queue.put(None)
+                return
+
         # Create and run agent
         print(f"Using model: {model_id}")
         print(f"Question: {question}")
         print("-" * 80)
 
         agent = create_agent(model_id=model_id)
+
+        # Check again before running
+        with sessions_lock:
+            if session['stop_flag']:
+                print("⏹ Execution cancelled")
+                queue.put(None)
+                return
+
         answer = agent.run(question)
+
+        # Check if stopped during execution
+        with sessions_lock:
+            if session['stop_flag']:
+                print("⏹ Execution cancelled")
+                queue.put(None)
+                return
 
         print("-" * 80)
         print(f"✓ Final Answer: {answer}")
@@ -79,13 +108,15 @@ def run_agent_thread(question, model_id, queue):
         queue.put(None)  # Signal end of stream
     finally:
         sys.stdout = old_stdout
+        # Clean up session
+        with sessions_lock:
+            if session_id in active_sessions:
+                del active_sessions[session_id]
 
 
 @app.route("/api/run/stream", methods=["POST"])
 def run_agent_stream():
     """Streaming API endpoint using Server-Sent Events"""
-    global output_queue
-
     try:
         data = request.json
         question = data.get("question", "").strip()
@@ -94,13 +125,20 @@ def run_agent_stream():
         if not question:
             return jsonify({"error": "Question is required"}), 400
 
-        # Create a new queue for this run
+        # Create session with unique ID
+        session_id = str(uuid.uuid4())
         output_queue = Queue()
+
+        with sessions_lock:
+            active_sessions[session_id] = {
+                'queue': output_queue,
+                'stop_flag': False
+            }
 
         # Start agent in background thread
         agent_thread = threading.Thread(
             target=run_agent_thread,
-            args=(question, model_id, output_queue),
+            args=(question, model_id, session_id),
             daemon=True
         )
         agent_thread.start()
@@ -108,6 +146,9 @@ def run_agent_stream():
         # Stream responses
         import json
         def generate():
+            # Send session_id as first message
+            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+
             while True:
                 item = output_queue.get()
                 if item is None:  # End of stream
@@ -125,6 +166,20 @@ def run_agent_stream():
             }
         )
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/stop/<session_id>", methods=["POST"])
+def stop_session(session_id):
+    """Stop a running agent session"""
+    try:
+        with sessions_lock:
+            if session_id in active_sessions:
+                active_sessions[session_id]['stop_flag'] = True
+                return jsonify({"success": True, "message": "Stop signal sent"}), 200
+            else:
+                return jsonify({"success": False, "message": "Session not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
