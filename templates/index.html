@@ -6,7 +6,7 @@
     <title>Open Deep Research - Web UI</title>
 
     <!-- Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ range(1, 999999) | random }}">
     <link id="highlight-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 
     <!-- CDN Libraries -->
@@ -80,7 +80,7 @@
                         <button class="filter-btn" data-filter="tool_call">Tools</button>
                         <button class="filter-btn" data-filter="plan">Plans</button>
                         <button class="filter-btn" data-filter="code_block">Code</button>
-                        <button class="filter-btn" data-filter="observation">Search</button>
+                        <button class="filter-btn" data-filter="observation">Results</button>
                         <button class="filter-btn" data-filter="final_answer">Answer</button>
                         <button class="filter-btn" data-filter="error">Errors</button>
                     </div>
@@ -99,10 +99,11 @@
     </div>
 
     <!-- Application Scripts -->
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/renderer.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/history.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% set cache_bust = range(1, 999999) | random %}
+    <script src="{{ url_for('static', filename='js/utils.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/renderer.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/history.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/shortcuts.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ cache_bust }}"></script>
 </body>
 </html>

@@ -3,11 +3,12 @@
  * Handles structured JSON events from the agent subprocess via SSE.
  *
  * Event types from run.py:
- *   action_step    — step_number, agent_name, tool_calls[], code_action,
- *                     observations, error, is_final_answer, action_output,
- *                     duration, token_usage
+ *   action_step    — step_number, agent_name, model_output, tool_calls[],
+ *                     code_action, observations, error, is_final_answer,
+ *                     action_output, duration, token_usage
  *   planning_step  — plan, agent_name, duration, token_usage
  *   final_answer   — output, agent_name (null for top-level)
+ *   code_running   — title, code (lightweight, from logger — fires before execution)
  *   info           — content
  *   error          — content
  *   message        — content
@@ -23,6 +24,14 @@ let skeletonShown = false;
 // Track which agents have sub-agent containers
 let lastAgentName = null; // null = top-level agent
 let subAgentContainer = null;
+
+// Lightweight "step starting" indicator (replaced when full action_step arrives)
+let pendingStepIndicator = null;
+
+// Track the most recently closed sub-agent container so the parent CodeAgent
+// step can be inserted *before* it (the parent step triggers the sub-agent,
+// so visually it should appear above the sub-agent's work).
+let lastClosedSubAgentContainer = null;
 
 /**
  * Get the append target — inside sub-agent container if active, else output div
@@ -79,8 +88,19 @@ function openSubAgent(agentName) {
 }
 
 function closeSubAgent() {
+    lastClosedSubAgentContainer = subAgentContainer;
     subAgentContainer = null;
     currentStepContainer = null;
+}
+
+/**
+ * Remove pending step indicator if present
+ */
+function removePendingIndicator() {
+    if (pendingStepIndicator && pendingStepIndicator.parentNode) {
+        pendingStepIndicator.remove();
+    }
+    pendingStepIndicator = null;
 }
 
 /**
@@ -100,6 +120,12 @@ function renderOutput(data) {
     let item;
 
     switch (data.type) {
+        case 'code_running':
+            // Lightweight indicator — code is about to execute
+            handleCodeRunning(data);
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+            return;
+
         case 'action_step':
             item = renderActionStep(data);
             break;
@@ -133,16 +159,63 @@ function renderOutput(data) {
     }
 
     if (item) {
+        removePendingIndicator();
         const target = getAppendTarget();
-        target.appendChild(item);
+
+        // If this is a CodeAgent step that called a sub-agent, insert it
+        // BEFORE the sub-agent container (the parent triggers the sub-agent,
+        // so it should appear above the sub-agent's work).
+        if (item.dataset && item.dataset.callsSubAgent === '1'
+            && lastClosedSubAgentContainer
+            && lastClosedSubAgentContainer.parentNode === target) {
+            target.insertBefore(item, lastClosedSubAgentContainer);
+            lastClosedSubAgentContainer = null;
+        } else {
+            target.appendChild(item);
+        }
+
         outputDiv.scrollTop = outputDiv.scrollHeight;
     }
 }
 
 /**
- * Render an action_step event with timeline, tool calls, code, observations
+ * Handle code_running event — show a lightweight "executing code" indicator.
+ * Removed when the next action_step/planning_step arrives.
+ */
+function handleCodeRunning(data) {
+    removePendingIndicator();
+
+    // Extract what's being called from the code to show a meaningful label
+    const code = data.code || '';
+    let label = 'Executing code';
+    const agentMatch = code.match(/(\w+_agent)\s*\(/);
+    if (agentMatch) {
+        label = `Calling ${agentMatch[1]}`;
+    } else {
+        // Look for tool calls like visualizer(...) or inspect_file_as_text(...)
+        const toolMatch = code.match(/(\w+)\s*\(/);
+        if (toolMatch && toolMatch[1] !== 'print') {
+            label = `Running ${toolMatch[1]}`;
+        }
+    }
+
+    const indicator = document.createElement('div');
+    indicator.className = 'output-item step-pending';
+    indicator.innerHTML = `<span class="spinner"></span> ${escapeHtml(label)}\u2026`;
+
+    const target = getAppendTarget();
+    target.appendChild(indicator);
+    pendingStepIndicator = indicator;
+}
+
+/**
+ * Render an action_step event with timeline, tool calls, code, observations.
+ * Always creates its own step container.
  */
 function renderActionStep(data) {
+    // Remove pending indicator (the real step replaces it)
+    removePendingIndicator();
+
     ensureAgentContext(data.agent_name || null);
 
     if (!totalStartTime) totalStartTime = Date.now();
@@ -159,6 +232,7 @@ function renderActionStep(data) {
     const container = document.createElement('div');
     container.className = 'step-container';
     container.dataset.startTime = stepStartTime;
+    container.dataset.stepNumber = data.step_number;
 
     const numCircle = document.createElement('div');
     numCircle.className = 'step-number active';
@@ -205,43 +279,92 @@ function renderActionStep(data) {
     const childrenDiv = document.createElement('div');
     childrenDiv.className = 'step-children';
 
-    // Code action (CodeAgent steps)
-    if (data.code_action) {
-        childrenDiv.appendChild(
-            createCollapsibleSection('Code', data.code_action, 'code_block', false, false)
-        );
+    // LLM reasoning/thinking text (before tool calls or code)
+    if (data.model_output) {
+        const thinking = document.createElement('div');
+        thinking.className = 'output-item model-output';
+        thinking.innerHTML = renderMarkdown(data.model_output);
+        childrenDiv.appendChild(thinking);
     }
 
-    // Tool calls (ToolCallingAgent steps)
-    if (data.tool_calls && data.tool_calls.length > 0) {
-        data.tool_calls.forEach(tc => {
-            childrenDiv.appendChild(createToolCallItem({
-                tool_name: tc.name,
-                arguments: tc.arguments
-            }));
-        });
+    const isCodeAgent = !!data.code_action;
+    // Detect if code calls a managed agent (sub-agent). When it does,
+    // the sub-agent's steps are already rendered as nested UI elements,
+    // so the observations (full sub-agent dump) are duplicate.
+    const callsSubAgent = isCodeAgent
+        && /\w+_agent\s*\(|search_agent\s*\(|text_webbrowser_agent\s*\(/.test(data.code_action || '');
+
+    if (isCodeAgent) {
+        // --- CodeAgent step ---
+        // code_action is the Python code, observations is execution logs,
+        // action_output is the return value. tool_calls[0] is always
+        // python_interpreter which is redundant — skip it.
+        container.dataset.callsSubAgent = callsSubAgent ? '1' : '';
+
+        if (callsSubAgent) {
+            // Show code collapsed with "Agent Call" label
+            childrenDiv.appendChild(
+                createCollapsibleSection('Agent Call', data.code_action, 'code_block', false, false)
+            );
+            // Skip the huge Execution Log — sub-agent steps shown inline above.
+            // If there was an error, it's shown separately below.
+        } else {
+            childrenDiv.appendChild(
+                createCollapsibleSection('Code', data.code_action, 'code_block', false, false)
+            );
+            if (data.observations) {
+                childrenDiv.appendChild(
+                    createCollapsibleSection('Execution Log', data.observations, 'observation', false, false)
+                );
+            }
+        }
+        if (data.action_output && !data.is_final_answer) {
+            childrenDiv.appendChild(
+                createCollapsibleSection('Return Value', data.action_output, 'code_execution', false, false)
+            );
+        }
+    } else {
+        // --- ToolCallingAgent step ---
+        // tool_calls are the invocations, observations is the concatenated
+        // raw result from executing those tools (str(tool_result)).
+        // When there's a single tool call, nest the result inside it.
+        // When there are multiple, show tool calls then a combined result.
+        const toolCalls = data.tool_calls || [];
+
+        if (toolCalls.length === 1) {
+            // Single tool call — pair invocation + result together
+            const toolItem = createToolCallItem({
+                tool_name: toolCalls[0].name,
+                arguments: toolCalls[0].arguments,
+                result: data.observations
+            });
+            childrenDiv.appendChild(toolItem);
+        } else {
+            // Multiple tool calls — show each, then combined result
+            toolCalls.forEach(tc => {
+                childrenDiv.appendChild(createToolCallItem({
+                    tool_name: tc.name,
+                    arguments: tc.arguments
+                }));
+            });
+            if (data.observations) {
+                childrenDiv.appendChild(
+                    createCollapsibleSection('Results', data.observations, 'observation', false, true)
+                );
+            }
+        }
     }
 
-    // Observations
-    if (data.observations) {
-        childrenDiv.appendChild(
-            createCollapsibleSection('Observations', data.observations, 'observation', false, true)
-        );
-    }
-
-    // Step error
+    // Step error — simplify when the error is from a sub-agent timeout
     if (data.error) {
+        let errorText = data.error;
+        if (callsSubAgent && /execution time|max.steps|timed?\s*out/i.test(errorText)) {
+            errorText = 'Sub-agent did not finish in time';
+        }
         const errorDiv = document.createElement('div');
         errorDiv.className = 'output-item error';
-        errorDiv.textContent = data.error;
+        errorDiv.textContent = errorText;
         childrenDiv.appendChild(errorDiv);
-    }
-
-    // Action output (non-final)
-    if (data.action_output && !data.is_final_answer) {
-        childrenDiv.appendChild(
-            createCollapsibleSection('Output', data.action_output, 'code_execution', false, false)
-        );
     }
 
     container.appendChild(childrenDiv);
@@ -255,6 +378,9 @@ function renderActionStep(data) {
  */
 function renderPlanningStep(data) {
     ensureAgentContext(data.agent_name || null);
+
+    // Remove pending indicator
+    removePendingIndicator();
 
     const container = document.createElement('div');
     container.className = 'planning-step-container';
@@ -285,12 +411,39 @@ function renderPlanningStep(data) {
 function renderFinalAnswer(data) {
     const answerContent = data.output || data.content || '';
 
-    // Sub-agent final answer — show as informational message
+    // Remove pending indicator
+    removePendingIndicator();
+
+    // Sub-agent final answer — show as collapsible result.
+    // Sub-agent results can be very long (especially on failure when the
+    // agent dumps its internal planning state), so always collapse.
     if (data.agent_name) {
         ensureAgentContext(data.agent_name);
+
         const item = document.createElement('div');
-        item.className = 'output-item message';
-        item.innerHTML = renderMarkdown(`**[${escapeHtml(data.agent_name)}] Result:** ${answerContent}`);
+        item.className = 'sub-agent-result';
+
+        // Extract a short preview (first ~200 chars, first paragraph)
+        const preview = extractPreview(answerContent, 200);
+        const isLong = answerContent.length > 300;
+
+        if (isLong) {
+            // Long result — show preview + collapsible full text
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'output-item message';
+            previewDiv.innerHTML = renderMarkdown(`**[${escapeHtml(data.agent_name)}] Result:** ${preview}\u2026`);
+            item.appendChild(previewDiv);
+            item.appendChild(
+                createCollapsibleSection('Full Result', answerContent, 'observation', false, true)
+            );
+        } else {
+            item.innerHTML = '';
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'output-item message';
+            msgDiv.innerHTML = renderMarkdown(`**[${escapeHtml(data.agent_name)}] Result:** ${answerContent}`);
+            item.appendChild(msgDiv);
+        }
+
         // Close sub-agent context — next event will be from parent
         closeSubAgent();
         lastAgentName = null;
@@ -330,8 +483,41 @@ function renderFinalAnswer(data) {
     return item;
 }
 
+// Tools that operate on the current browser page (no URL in their args)
+const BROWSER_NAV_TOOLS = new Set([
+    'find_on_page_ctrl_f', 'find_next', 'page_up', 'page_down'
+]);
+
 /**
- * Create a tool_call output item with syntax-highlighted args
+ * Extract "Address: <url>" from observation text (browser tool results)
+ */
+/**
+ * Extract a short preview from text — first paragraph or first N chars,
+ * breaking at a word boundary.
+ */
+function extractPreview(text, maxLen) {
+    if (!text) return '';
+    // Try to find first paragraph break
+    const paraEnd = text.indexOf('\n\n');
+    if (paraEnd > 0 && paraEnd <= maxLen) {
+        return text.substring(0, paraEnd).trim();
+    }
+    if (text.length <= maxLen) return text;
+    // Break at word boundary
+    const truncated = text.substring(0, maxLen);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return lastSpace > maxLen * 0.5 ? truncated.substring(0, lastSpace) : truncated;
+}
+
+function extractPageUrl(text) {
+    if (!text) return null;
+    const m = text.match(/^Address:\s*(https?:\/\/\S+)/m);
+    return m ? m[1] : null;
+}
+
+/**
+ * Create a tool_call output item with syntax-highlighted args.
+ * If data.result is provided, nests a collapsible result section inside.
  */
 function createToolCallItem(data) {
     const item = document.createElement('div');
@@ -341,6 +527,17 @@ function createToolCallItem(data) {
     nameDiv.className = 'tool-name';
     nameDiv.textContent = data.tool_name || 'Unknown tool';
     item.appendChild(nameDiv);
+
+    // For browser nav tools, show which page they're operating on
+    if (BROWSER_NAV_TOOLS.has(data.tool_name) && data.result) {
+        const pageUrl = extractPageUrl(data.result);
+        if (pageUrl) {
+            const urlDiv = document.createElement('div');
+            urlDiv.className = 'tool-page-url';
+            urlDiv.textContent = pageUrl;
+            item.appendChild(urlDiv);
+        }
+    }
 
     if (data.arguments != null) {
         const jsonStr = typeof data.arguments === 'string'
@@ -357,6 +554,13 @@ function createToolCallItem(data) {
         copyBtn.textContent = 'Copy';
         copyBtn.addEventListener('click', () => copyToClipboard(jsonStr, copyBtn));
         item.appendChild(copyBtn);
+    }
+
+    // Nested result (when single tool call, observations is paired here)
+    if (data.result) {
+        item.appendChild(
+            createCollapsibleSection('Result', data.result, 'observation', false, true)
+        );
     }
 
     return item;
@@ -526,5 +730,7 @@ function resetRendererState() {
     skeletonShown = false;
     lastAgentName = null;
     subAgentContainer = null;
+    pendingStepIndicator = null;
+    lastClosedSubAgentContainer = null;
     stopElapsedTracking();
 }

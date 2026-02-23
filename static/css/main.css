@@ -351,6 +351,15 @@ button {
     font-size: 1.1em;
 }
 
+.output-item.tool_call .tool-page-url {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .output-item.tool_call .tool-args {
     background: var(--bg-code);
     color: var(--text-primary);
@@ -540,6 +549,18 @@ button {
     margin-right: 8px;
 }
 
+/* Model reasoning/thinking output */
+.output-item.model-output {
+    padding: 8px 16px;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
+.output-item.model-output p {
+    margin: 0.3em 0;
+}
+
 /* Info message */
 .output-item.info {
     background: var(--answer-bg);
@@ -693,6 +714,17 @@ button {
     to {
         transform: rotate(360deg);
     }
+}
+
+/* ===== Step Pending Indicator ===== */
+.step-pending {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+    font-style: italic;
 }
 
 /* ===== Answer Box ===== */
