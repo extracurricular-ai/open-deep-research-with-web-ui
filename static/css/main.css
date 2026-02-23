@@ -501,9 +501,9 @@ button {
 .output-item.final_answer {
     background: linear-gradient(135deg, var(--final-gradient-start) 0%, var(--final-gradient-end) 100%);
     color: white;
-    padding: 16px;
-    border-radius: 6px;
-    margin: 16px 0;
+    padding: 24px;
+    border-radius: 8px;
+    margin: 0;
     box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
     position: relative;
 }
@@ -524,6 +524,8 @@ button {
 
 .output-item.final_answer .final-answer-content {
     line-height: 1.7;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .output-item.final_answer .final-answer-content p {
@@ -532,6 +534,7 @@ button {
 
 .output-item.final_answer .final-answer-content a {
     color: #c8e6c9;
+    word-break: break-all;
 }
 
 /* Error */
@@ -593,17 +596,33 @@ button {
     margin-bottom: 16px;
 }
 
-/* Planning step container */
-.planning-step-container {
-    margin-bottom: 16px;
+/* Plan step — uses clipboard icon instead of step number */
+.plan-step .step-number.plan-icon {
+    font-size: 0.75em;
+    background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+    opacity: 0.8;
 }
 
-/* Sub-agent visual nesting for action/planning containers */
-.action-step-container.sub-agent,
-.planning-step-container.sub-agent {
-    margin-left: 24px;
-    border-left: 3px solid var(--gradient-start);
-    padding-left: 12px;
+.plan-step .step_header.plan-header {
+    background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 80%);
+    opacity: 0.9;
+}
+
+/* Inline final answer inside a step (compact version) */
+.inline-final-answer .collapsible-header {
+    background: linear-gradient(135deg, var(--final-gradient-start) 0%, var(--final-gradient-end) 100%);
+    color: white;
+    border-bottom-color: var(--final-gradient-start);
+}
+
+.inline-final-answer .collapsible-header .copy-btn {
+    background: rgba(255,255,255,0.2);
+    border-color: rgba(255,255,255,0.3);
+    color: white;
+}
+
+.inline-final-answer .collapsible-header:hover {
+    opacity: 0.95;
 }
 
 /* Message */
@@ -727,23 +746,9 @@ button {
     font-style: italic;
 }
 
-/* ===== Answer Box ===== */
-.answer-box {
-    background: var(--answer-bg);
-    border-left: 4px solid var(--answer-border);
-    padding: 15px;
-    border-radius: 4px;
-    margin-top: 20px;
-}
-
-.answer-box h3 {
-    color: var(--gradient-start);
-    margin-bottom: 10px;
-}
-
-.answer-box p {
-    color: var(--text-primary);
-    line-height: 1.6;
+/* ===== Answer Box (holds the final_answer block below #output) ===== */
+#answerBox {
+    margin-top: 16px;
 }
 
 /* ===== Step Timeline ===== */

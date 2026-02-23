@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import os
 import sys
 import threading
@@ -404,16 +405,21 @@ def create_agent(model_id="o1"):
     # Inject custom instructions into the system prompt template.
     # This nudges the CodeAgent to use Python execution for things it can
     # compute directly (dates, math, parsing) instead of delegating everything.
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     manager_agent.prompt_templates["system_prompt"] = (
         manager_agent.prompt_templates["system_prompt"].rstrip()
         + "\n\n"
+        + f"Current date and time: {now}\n\n"
         + "You can execute Python code directly — use this whenever it is more "
         "efficient than delegating to search_agent. For example: use datetime "
         "to get the current date/time, use math/statistics for calculations, "
         "use json/re to parse or transform data, and use string operations to "
         "process text. Prepare as much context as possible in code (dates, "
         "computed values, formatted queries) before delegating web searches to "
-        "search_agent, and pass that context in the task description."
+        "search_agent, and pass that context in the task description. "
+        "When providing the final answer, include all important details, "
+        "findings, and sources from the search results. Do not over-summarize "
+        "or omit key information gathered by search_agent."
     )
 
     return manager_agent

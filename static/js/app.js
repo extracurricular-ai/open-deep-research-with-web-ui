@@ -17,7 +17,6 @@
     const outputDiv = document.getElementById('output');
     const statusDiv = document.getElementById('status');
     const answerBox = document.getElementById('answerBox');
-    const answerText = document.getElementById('answerText');
 
     // Stream state
     let currentReader = null;
