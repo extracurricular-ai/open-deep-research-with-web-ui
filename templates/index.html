@@ -371,6 +371,51 @@
             word-break: break-word;
         }
 
+        /* Info message */
+        .output-item.info {
+            background: #f0f7ff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            color: #555;
+            border-left: 3px solid #667eea;
+            font-size: 0.9em;
+        }
+
+        /* Action step container */
+        .action-step-container {
+            margin-bottom: 16px;
+        }
+
+        /* Sub-agent steps get visual nesting */
+        .action-step-container.sub-agent {
+            margin-left: 24px;
+            border-left: 3px solid #667eea;
+            padding-left: 12px;
+        }
+
+        .planning-step-container.sub-agent {
+            margin-left: 24px;
+            border-left: 3px solid #667eea;
+            padding-left: 12px;
+        }
+
+        /* Step metrics bar */
+        .step-metrics {
+            font-size: 0.8em;
+            color: #888;
+            padding: 4px 16px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        /* Sub-agent badge in step header */
+        .agent-badge {
+            background: rgba(255,255,255,0.25);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: normal;
+        }
+
         .status {
             margin-top: 15px;
             padding: 15px;
@@ -528,42 +573,34 @@
             let item;
 
             switch (data.type) {
-                case 'step_header':
-                    item = document.createElement('div');
-                    item.className = 'output-item step_header';
-                    item.textContent = `Step ${data.step_number}`;
+                case 'action_step':
+                    item = renderActionStep(data);
                     break;
 
-                case 'tool_call':
-                    item = document.createElement('div');
-                    item.className = 'output-item tool_call';
-                    item.innerHTML = `<div class="tool-name">${data.tool_name}</div>`;
-                    if (data.arguments) {
-                        const argsDiv = document.createElement('div');
-                        argsDiv.className = 'tool-args';
-                        argsDiv.textContent = JSON.stringify(data.arguments, null, 2);
-                        item.appendChild(argsDiv);
-                    }
-                    break;
-
-                case 'code_block':
-                    item = createCollapsibleSection('Code', data.content, 'code_block', false);
-                    break;
-
-                case 'plan':
-                    item = createCollapsibleSection('Plan', data.content, 'plan', true);
-                    break;
-
-                case 'observation':
-                    item = createCollapsibleSection('Search Results', data.content, 'observation', false);
+                case 'planning_step':
+                    item = renderPlanningStep(data);
                     break;
 
                 case 'final_answer':
+                    // Only show as THE final answer if from top-level agent
+                    if (!data.agent_name) {
+                        item = document.createElement('div');
+                        item.className = 'output-item final_answer';
+                        item.textContent = data.output;
+                        answerText.textContent = data.output;
+                        answerBox.style.display = 'block';
+                    } else {
+                        // Sub-agent final answer — show as informational
+                        item = document.createElement('div');
+                        item.className = 'output-item message';
+                        item.textContent = `[${data.agent_name}] Result: ${data.output}`;
+                    }
+                    break;
+
+                case 'info':
                     item = document.createElement('div');
-                    item.className = 'output-item final_answer';
+                    item.className = 'output-item info';
                     item.textContent = data.content;
-                    answerText.textContent = data.content;
-                    answerBox.style.display = 'block';
                     break;
 
                 case 'error':
@@ -572,24 +609,134 @@
                     item.textContent = data.content;
                     break;
 
-                case 'code_execution':
-                    item = createCollapsibleSection('Code Execution', data.content, 'code_execution', false);
-                    break;
-
-                case 'separator':
-                    // Skip separators
-                    return;
-
                 case 'message':
                 default:
                     item = document.createElement('div');
                     item.className = 'output-item message';
-                    item.textContent = data.content;
+                    item.textContent = data.content || JSON.stringify(data);
             }
 
             if (item) {
                 outputDiv.appendChild(item);
             }
+        }
+
+        function renderActionStep(data) {
+            const container = document.createElement('div');
+            container.className = 'action-step-container';
+            if (data.agent_name) {
+                container.classList.add('sub-agent');
+            }
+
+            // Step header
+            const header = document.createElement('div');
+            header.className = 'output-item step_header';
+            let headerText = `Step ${data.step_number}`;
+            if (data.agent_name) {
+                headerText += ` `;
+            }
+            header.textContent = headerText;
+            if (data.agent_name) {
+                const badge = document.createElement('span');
+                badge.className = 'agent-badge';
+                badge.textContent = data.agent_name;
+                header.appendChild(badge);
+            }
+            container.appendChild(header);
+
+            // Metrics bar
+            if (data.duration != null || data.token_usage) {
+                const metrics = document.createElement('div');
+                metrics.className = 'step-metrics';
+                const parts = [];
+                if (data.duration != null) parts.push(`Duration: ${data.duration.toFixed(1)}s`);
+                if (data.token_usage) {
+                    parts.push(`Tokens: ${data.token_usage.input_tokens.toLocaleString()} in / ${data.token_usage.output_tokens.toLocaleString()} out`);
+                }
+                metrics.textContent = parts.join(' | ');
+                container.appendChild(metrics);
+            }
+
+            // Code action (CodeAgent steps)
+            if (data.code_action) {
+                container.appendChild(
+                    createCollapsibleSection('Code', data.code_action, 'code_block', false)
+                );
+            }
+
+            // Tool calls (ToolCallingAgent steps)
+            if (data.tool_calls && data.tool_calls.length > 0) {
+                data.tool_calls.forEach(tc => {
+                    const toolDiv = document.createElement('div');
+                    toolDiv.className = 'output-item tool_call';
+
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'tool-name';
+                    nameDiv.textContent = tc.name;
+                    toolDiv.appendChild(nameDiv);
+
+                    if (tc.arguments != null) {
+                        const argsDiv = document.createElement('div');
+                        argsDiv.className = 'tool-args';
+                        argsDiv.textContent = typeof tc.arguments === 'string'
+                            ? tc.arguments
+                            : JSON.stringify(tc.arguments, null, 2);
+                        toolDiv.appendChild(argsDiv);
+                    }
+                    container.appendChild(toolDiv);
+                });
+            }
+
+            // Observations
+            if (data.observations) {
+                container.appendChild(
+                    createCollapsibleSection('Observations', data.observations, 'observation', false)
+                );
+            }
+
+            // Step error
+            if (data.error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'output-item error';
+                errorDiv.textContent = data.error;
+                container.appendChild(errorDiv);
+            }
+
+            // Action output (non-final)
+            if (data.action_output && !data.is_final_answer) {
+                container.appendChild(
+                    createCollapsibleSection('Output', data.action_output, 'code_execution', false)
+                );
+            }
+
+            return container;
+        }
+
+        function renderPlanningStep(data) {
+            const container = document.createElement('div');
+            container.className = 'planning-step-container';
+            if (data.agent_name) {
+                container.classList.add('sub-agent');
+            }
+
+            const title = data.agent_name ? `Plan (${data.agent_name})` : 'Plan';
+            const section = createCollapsibleSection(title, data.plan, 'plan', true);
+            container.appendChild(section);
+
+            // Metrics bar
+            if (data.duration != null || data.token_usage) {
+                const metrics = document.createElement('div');
+                metrics.className = 'step-metrics';
+                const parts = [];
+                if (data.duration != null) parts.push(`Duration: ${data.duration.toFixed(1)}s`);
+                if (data.token_usage) {
+                    parts.push(`Tokens: ${data.token_usage.input_tokens.toLocaleString()} in / ${data.token_usage.output_tokens.toLocaleString()} out`);
+                }
+                metrics.textContent = parts.join(' | ');
+                container.appendChild(metrics);
+            }
+
+            return container;
         }
 
         function createCollapsibleSection(title, content, type, expanded = false) {
@@ -701,7 +848,7 @@
                     // Add error to output
                     const errorItem = document.createElement('div');
                     errorItem.className = 'output-item error';
-                    errorItem.innerHTML = `<strong>Server Error:</strong> ${error.error}`;
+                    errorItem.textContent = `Server Error: ${error.error}`;
                     outputDiv.appendChild(errorItem);
                     outputDiv.scrollTop = outputDiv.scrollHeight;
 
@@ -765,7 +912,7 @@
                 // Add error message to output
                 const errorItem = document.createElement('div');
                 errorItem.className = 'output-item error';
-                errorItem.innerHTML = `<strong>Network Error:</strong> ${error.message}`;
+                errorItem.textContent = `Network Error: ${error.message}`;
                 outputDiv.appendChild(errorItem);
                 outputDiv.scrollTop = outputDiv.scrollHeight;
             } finally {

@@ -1,10 +1,15 @@
 import argparse
 import os
+import sys
 import threading
 import requests
 import json
 
 from dotenv import load_dotenv
+from rich.console import Console
+from smolagents.monitoring import AgentLogger
+from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
+
 from scripts.text_inspector_tool import TextInspectorTool
 from scripts.text_web_browser import (
     ArchiveSearchTool,
@@ -24,6 +29,96 @@ from smolagents import (
     Tool,
     ToolCallingAgent,
 )
+
+
+# --- JSON protocol for structured output ---
+# Save real stdout for JSON events, redirect sys.stdout to stderr
+# so any print() from libraries/tools goes to stderr, keeping stdout
+# exclusively for our structured JSON lines.
+_json_out = sys.stdout
+sys.stdout = sys.stderr
+
+_emit_lock = threading.Lock()
+MAX_FIELD_LENGTH = 50000
+
+
+def _truncate(s, max_len=MAX_FIELD_LENGTH):
+    """Truncate large strings to avoid huge JSON lines."""
+    if s and isinstance(s, str) and len(s) > max_len:
+        return s[:max_len] + f"\n... [truncated, {len(s)} total chars]"
+    return s
+
+
+def emit_event(event_type, **data):
+    """Emit a JSON-lines event to the real stdout."""
+    try:
+        event = {"type": event_type, **data}
+        line = json.dumps(event, default=str)
+        with _emit_lock:
+            _json_out.write(line + "\n")
+            _json_out.flush()
+    except Exception as e:
+        sys.stderr.write(f"emit_event error: {e}\n")
+
+
+def on_action_step(step, agent=None):
+    """Callback for ActionStep — emits structured step data."""
+    agent_name = getattr(agent, 'name', None) if agent else None
+
+    tool_calls_data = []
+    if step.tool_calls:
+        for tc in step.tool_calls:
+            tool_calls_data.append({
+                "name": tc.name,
+                "arguments": tc.arguments,
+            })
+
+    emit_event(
+        "action_step",
+        step_number=step.step_number,
+        agent_name=agent_name,
+        tool_calls=tool_calls_data,
+        code_action=step.code_action,
+        observations=_truncate(step.observations),
+        error=str(step.error) if step.error else None,
+        is_final_answer=step.is_final_answer,
+        action_output=_truncate(str(step.action_output)) if step.action_output is not None else None,
+        duration=step.timing.duration,
+        token_usage=step.token_usage.dict() if step.token_usage else None,
+    )
+
+
+def on_planning_step(step, agent=None):
+    """Callback for PlanningStep — emits plan text."""
+    agent_name = getattr(agent, 'name', None) if agent else None
+    emit_event(
+        "planning_step",
+        plan=step.plan,
+        agent_name=agent_name,
+        duration=step.timing.duration,
+        token_usage=step.token_usage.dict() if step.token_usage else None,
+    )
+
+
+def on_final_answer(step, agent=None):
+    """Callback for FinalAnswerStep — emits final answer."""
+    agent_name = getattr(agent, 'name', None) if agent else None
+    emit_event(
+        "final_answer",
+        output=str(step.output),
+        agent_name=agent_name,
+    )
+
+
+_step_callbacks = {
+    ActionStep: on_action_step,
+    PlanningStep: on_planning_step,
+    FinalAnswerStep: on_final_answer,
+}
+
+# Silent logger that discards all Rich terminal output
+_devnull = open(os.devnull, "w")
+_silent_logger = AgentLogger(level=0, console=Console(file=_devnull, highlight=False))
 
 
 load_dotenv(override=True)
@@ -138,20 +233,20 @@ def get_search_tools(max_results=10):
     tools = []
     for engine in engines:
         if engine == "DDGS":
-            print(f"📡 Using DuckDuckGo search engine")
+            emit_event("info", content="Using DuckDuckGo search engine")
             tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
         elif engine == "META_SOTA":
             api_key = os.getenv("META_SOTA_API_KEY")
             if not api_key:
-                print(f"⚠️  META_SOTA_API_KEY not found, skipping MetaSo search")
+                emit_event("info", content="META_SOTA_API_KEY not found, skipping MetaSo search")
                 continue
-            print(f"📡 Using MetaSo search engine")
+            emit_event("info", content="Using MetaSo search engine")
             tools.append(MetaSotaSearchTool(api_key=api_key, max_results=max_results))
         else:
-            print(f"⚠️  Unknown search engine: {engine}, skipping")
+            emit_event("info", content=f"Unknown search engine: {engine}, skipping")
 
     if not tools:
-        print(f"⚠️  No valid search engines configured, falling back to DuckDuckGo")
+        emit_event("info", content="No valid search engines configured, falling back to DuckDuckGo")
         tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
 
     return tools
@@ -197,6 +292,8 @@ def create_agent(model_id="o1"):
     Your request must be a real sentence, not a google search! Like "Find me this information (...)" rather than a few keywords.
     """,
         provide_run_summary=True,
+        step_callbacks=_step_callbacks,
+        logger=_silent_logger,
     )
     text_webbrowser_agent.prompt_templates["managed_agent"]["task"] += """You can navigate to .txt online files.
     If a non-html page is in another format, especially .pdf or a Youtube video, use tool 'inspect_file_as_text' to inspect it.
@@ -220,6 +317,8 @@ def create_agent(model_id="o1"):
         additional_authorized_imports=safe_imports,
         planning_interval=4,
         managed_agents=[text_webbrowser_agent],
+        step_callbacks=_step_callbacks,
+        logger=_silent_logger,
     )
 
     return manager_agent
@@ -230,9 +329,7 @@ def main():
 
     agent = create_agent(model_id=args.model_id)
 
-    answer = agent.run(args.question)
-
-    print(f"✓ Final Answer: {answer}")
+    agent.run(args.question)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 import argparse
-import io
 import os
 import sys
 import threading
@@ -15,8 +14,6 @@ from queue import Queue
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, stream_with_context, Response
 from flask_cors import CORS
-
-from output_formatter import OutputFormatter
 
 load_dotenv(override=True)
 
@@ -59,27 +56,34 @@ def delete_session_file(session_id):
         session_file.unlink()
 
 
-def read_process_output(process, queue, formatter):
-    """Read from process stdout and queue formatted output"""
+def read_process_output(process, queue):
+    """Read JSON lines from process stdout and queue them."""
     try:
         for line in iter(process.stdout.readline, b''):
             if line:
-                text = line.decode('utf-8', errors='replace')
-                # Format the output
-                output = formatter.add_text(text)
-                if output:
-                    queue.put(output)
-                # Also print to console
-                print(text, end='')
-
-        # Flush any remaining content
-        output = formatter.flush()
-        if output:
-            queue.put(output)
+                text = line.decode('utf-8', errors='replace').strip()
+                if not text:
+                    continue
+                try:
+                    event = json.loads(text)
+                    queue.put(event)
+                except json.JSONDecodeError:
+                    # Non-JSON line (library output that leaked to stdout)
+                    queue.put({"type": "message", "content": text})
     except Exception as e:
-        print(f"Error reading process output: {e}")
+        queue.put({"type": "error", "content": f"Error reading process output: {e}"})
     finally:
         queue.put(None)  # Signal end of stream
+
+
+def drain_stderr(process):
+    """Read stderr for debug logging, prevent pipe buffer deadlock."""
+    try:
+        for line in iter(process.stderr.readline, b''):
+            if line:
+                print(f"[agent] {line.decode('utf-8', errors='replace')}", end='')
+    except Exception:
+        pass
 
 
 @app.route("/")
@@ -110,7 +114,7 @@ def run_agent_stream():
         process = subprocess.Popen(
             [sys.executable, '-u', 'run.py', question, '--model-id', model_id],
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             env=env,
             bufsize=1
         )
@@ -129,14 +133,21 @@ def run_agent_stream():
                 'queue': output_queue
             }
 
-        # Start thread to read process output
-        formatter = OutputFormatter()
+        # Start thread to read JSON lines from process stdout
         reader_thread = threading.Thread(
             target=read_process_output,
-            args=(process, output_queue, formatter),
+            args=(process, output_queue),
             daemon=True
         )
         reader_thread.start()
+
+        # Drain stderr to prevent pipe buffer deadlock
+        stderr_thread = threading.Thread(
+            target=drain_stderr,
+            args=(process,),
+            daemon=True
+        )
+        stderr_thread.start()
 
         # Stream responses
         def generate():
@@ -149,7 +160,7 @@ def run_agent_stream():
                     if item is None:  # End of stream
                         yield f"data: {json.dumps({'done': True})}\n\n"
                         break
-                    # Item is already a structured dict from the formatter
+                    # Item is a structured JSON event from run.py callbacks
                     yield f"data: {json.dumps(item)}\n\n"
 
             except GeneratorExit:
