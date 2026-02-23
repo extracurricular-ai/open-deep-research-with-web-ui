@@ -24,6 +24,7 @@
     let currentSessionId = null;
     let isStopped = false;
     let lastFinalAnswer = null;
+    let hasError = false;
 
     // ===== Theme Management =====
     function initTheme() {
@@ -173,6 +174,7 @@
         stopBtn.style.display = 'inline-block';
         isStopped = false;
         lastFinalAnswer = null;
+        hasError = false;
         resetRendererState();
 
         // Show loading skeleton
@@ -214,7 +216,11 @@
                 const { done, value } = await reader.read();
 
                 if (done) {
-                    showStatus('\u2713 Completed successfully!', 'success');
+                    if (hasError) {
+                        showStatus('\u2717 Completed with errors', 'error');
+                    } else {
+                        showStatus('\u2713 Completed successfully!', 'success');
+                    }
                     break;
                 }
 
@@ -234,6 +240,10 @@
                                 break;
                             } else {
                                 renderOutput(jsonData);
+                                // Track errors
+                                if (jsonData.type === 'error') {
+                                    hasError = true;
+                                }
                                 // Track final answer for history
                                 if (jsonData.type === 'final_answer' && !jsonData.agent_name) {
                                     lastFinalAnswer = jsonData.output || jsonData.content;
