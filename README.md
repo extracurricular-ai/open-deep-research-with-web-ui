@@ -134,6 +134,60 @@ The web UI provides:
   <p><em>Highlighted final answer with collapsible sections</em></p>
 </div>
 
+#### Architecture: Rendering Pipeline
+
+The Web UI uses a streaming architecture where agent events are rendered in real-time:
+
+```
+run.py (step_callbacks + StreamingLogger)
+  │  JSON-lines on stdout
+  ▼
+web_app.py (subprocess → SSE)
+  │  Server-Sent Events
+  ▼
+renderer.js (renderOutput switch)
+  │  DOM manipulation
+  ▼
+Browser DOM (nested step containers)
+```
+
+**Event → DOM mapping:**
+
+| SSE Event | agent_name | DOM Element | Placement |
+|-----------|------------|-------------|-----------|
+| `planning_step` | null | `step-container.plan-step` | Top-level |
+| `planning_step` | "search_agent" | `step-container.plan-step` | Inside sub-agent |
+| `code_running` (agent call) | — | Placeholder `step-container` | Top-level |
+| `code_running` (other) | — | Spinner indicator | Current context |
+| `action_step` | null (calls sub-agent) | Merges into placeholder | Top-level |
+| `action_step` | null (no sub-agent) | `step-container` | Top-level |
+| `action_step` | "search_agent" | `step-container` | Inside sub-agent |
+| `final_answer` | "search_agent" | `sub-agent-result` | Inside sub-agent |
+| `final_answer` | null | Inline + top-level block | Both |
+
+**DOM nesting hierarchy:**
+
+```
+#output
+├── step-container.plan-step (manager plan)
+│   └── step-children → collapsible plan
+├── step-container (manager step — created as placeholder, merged later)
+│   └── step-children
+│       ├── model-output (reasoning)
+│       ├── Agent Call (collapsed code)
+│       ├── sub-agent-container
+│       │   └── sub-agent-children
+│       │       ├── step-container.plan-step (sub-agent plan)
+│       │       ├── step-container (sub-agent steps with tool calls)
+│       │       └── sub-agent-result (preview + collapsible)
+│       └── error (if timeout)
+├── step-container (manager step 2)
+│   └── step-children
+│       ├── Code, Execution Log
+│       └── inline-final-answer (collapsible)
+└── final_answer (prominent green block with Copy)
+```
+
 #### Development Mode
 
 Start the development server:

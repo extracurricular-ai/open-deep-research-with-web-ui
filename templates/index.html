@@ -4,514 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open Deep Research - Web UI</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 100%;
-            width: 100%;
-            margin: 0 auto;
-            padding: 0 20px;
-            box-sizing: border-box;
-        }
-
-        header {
-            text-align: center;
-            color: white;
-            margin-bottom: 40px;
-            padding: 20px 0;
-        }
-
-        header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-
-        header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .panel {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            padding: 30px;
-            width: 100%;
-            box-sizing: border-box;
-            overflow: hidden;
-        }
-
-        .panel h2 {
-            font-size: 1.5em;
-            margin-bottom: 20px;
-            color: #333;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #555;
-        }
-
-        input[type="text"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 1em;
-            font-family: inherit;
-            transition: border-color 0.3s;
-        }
-
-        input[type="text"]:focus,
-        select:focus,
-        textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        textarea {
-            resize: vertical;
-            min-height: 100px;
-            font-family: 'Monaco', 'Menlo', monospace;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        button {
-            flex: 1;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .btn-submit {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-submit:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-submit:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .btn-stop {
-            background: #f44336;
-            color: white;
-        }
-
-        .btn-stop:hover:not(:disabled) {
-            background: #d32f2f;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(244, 67, 54, 0.4);
-        }
-
-        .btn-clear {
-            background: #f0f0f0;
-            color: #333;
-        }
-
-        .btn-clear:hover {
-            background: #e0e0e0;
-        }
-
-        #output {
-            background: #f5f5f5;
-            padding: 20px;
-            border-radius: 8px;
-            overflow-y: auto;
-            max-height: 800px;
-            font-size: 0.95em;
-            line-height: 1.6;
-        }
-
-        #output.empty {
-            color: #999;
-            font-style: italic;
-            text-align: center;
-            padding: 40px 20px;
-        }
-
-        .output-item {
-            margin-bottom: 12px;
-        }
-
-        /* Step Container */
-        .output-item.step_header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 16px;
-            border-radius: 6px;
-            margin: 16px 0 12px 0;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
-        }
-
-        .output-item.step_header::before {
-            content: '▶';
-            font-size: 1.2em;
-        }
-
-        /* Tool Call Card */
-        .output-item.tool_call {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-left: 4px solid #4caf50;
-            padding: 12px 16px;
-            border-radius: 6px;
-            margin-left: 20px;
-        }
-
-        .output-item.tool_call .tool-name {
-            font-weight: bold;
-            color: #2e7d32;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .output-item.tool_call .tool-name::before {
-            content: '🔧';
-            font-size: 1.1em;
-        }
-
-        .output-item.tool_call .tool-args {
-            background: #f5f5f5;
-            color: #333;
-            margin-top: 8px;
-            padding: 10px 12px;
-            border-radius: 4px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.85em;
-            border: 1px solid #e0e0e0;
-            white-space: pre-wrap;
-            word-break: break-word;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        /* Collapsible Sections */
-        .collapsible-section {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            margin-bottom: 12px;
-            overflow: hidden;
-        }
-
-        .collapsible-header {
-            background: #f9f9f9;
-            padding: 12px 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-            color: #333;
-            transition: background 0.2s;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .collapsible-header:hover {
-            background: #f0f0f0;
-        }
-
-        .collapsible-header .toggle {
-            font-size: 0.8em;
-            transition: transform 0.2s;
-        }
-
-        .collapsible-header.open .toggle {
-            transform: rotate(90deg);
-        }
-
-        .collapsible-content {
-            padding: 12px 16px;
-            color: #555;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease-out;
-        }
-
-        .collapsible-header.open + .collapsible-content {
-            max-height: 500px;
-        }
-
-        .collapsible-content pre {
-            background: #f5f5f5;
-            padding: 10px 12px;
-            border-radius: 4px;
-            overflow-x: auto;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.85em;
-            margin: 0;
-        }
-
-        /* Plan Section */
-        .output-item.plan {
-            margin-left: 20px;
-        }
-
-        .output-item.plan .collapsible-header::before {
-            content: '📋';
-            font-size: 1.1em;
-        }
-
-        /* Observation Section */
-        .output-item.observation .collapsible-header::before {
-            content: '🔍';
-            font-size: 1.1em;
-        }
-
-        /* Final Answer */
-        .output-item.final_answer {
-            background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
-            color: white;
-            padding: 16px;
-            border-radius: 6px;
-            margin: 16px 0;
-            font-weight: bold;
-            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
-        }
-
-        .output-item.final_answer::before {
-            content: '✓ ';
-            font-size: 1.2em;
-            margin-right: 8px;
-        }
-
-        /* Error */
-        .output-item.error {
-            background: #ffebee;
-            border-left: 4px solid #f44336;
-            padding: 12px 16px;
-            border-radius: 6px;
-            color: #c62828;
-            font-weight: bold;
-        }
-
-        .output-item.error::before {
-            content: '✗ ';
-            margin-right: 8px;
-        }
-
-        /* Code Block */
-        .output-item.code_block {
-            margin-left: 20px;
-        }
-
-        .output-item.code_block .collapsible-header::before {
-            content: '</>';
-            font-size: 1em;
-            font-weight: bold;
-        }
-
-        /* Code Execution */
-        .output-item.code_execution .collapsible-header::before {
-            content: '▶';
-            font-size: 1em;
-        }
-
-        /* Message */
-        .output-item.message {
-            background: white;
-            padding: 10px 16px;
-            border-radius: 6px;
-            color: #666;
-            border-left: 3px solid #bbb;
-            margin-left: 20px;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-
-        /* Info message */
-        .output-item.info {
-            background: #f0f7ff;
-            padding: 8px 16px;
-            border-radius: 6px;
-            color: #555;
-            border-left: 3px solid #667eea;
-            font-size: 0.9em;
-        }
-
-        /* Action step container */
-        .action-step-container {
-            margin-bottom: 16px;
-        }
-
-        /* Sub-agent steps get visual nesting */
-        .action-step-container.sub-agent {
-            margin-left: 24px;
-            border-left: 3px solid #667eea;
-            padding-left: 12px;
-        }
-
-        .planning-step-container.sub-agent {
-            margin-left: 24px;
-            border-left: 3px solid #667eea;
-            padding-left: 12px;
-        }
-
-        /* Step metrics bar */
-        .step-metrics {
-            font-size: 0.8em;
-            color: #888;
-            padding: 4px 16px;
-            font-family: 'Monaco', 'Courier New', monospace;
-        }
-
-        /* Sub-agent badge in step header */
-        .agent-badge {
-            background: rgba(255,255,255,0.25);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 0.8em;
-            font-weight: normal;
-        }
-
-        .status {
-            margin-top: 15px;
-            padding: 15px;
-            border-radius: 6px;
-            display: none;
-            font-weight: 600;
-        }
-
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-            display: block;
-        }
-
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            display: block;
-        }
-
-        .status.loading {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #0c5460;
-            border-top-color: transparent;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        .answer-box {
-            background: #f0f7ff;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-        }
-
-        .answer-box h3 {
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-
-        .answer-box p {
-            color: #333;
-            line-height: 1.6;
-        }
-
-        footer {
-            text-align: center;
-            color: white;
-            margin-top: 40px;
-            opacity: 0.8;
-        }
-    </style>
+    <!-- Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ range(1, 999999) | random }}">
+    <link id="highlight-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+
+    <!-- CDN Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🔍 Open Deep Research</h1>
-            <p>Web UI for AI-powered research and question answering</p>
+            <h1>Open Deep Research</h1>
+            <p>AI-powered research and question answering</p>
+            <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+                <span class="theme-icon-light">&#9788;</span>
+                <span class="theme-icon-dark">&#9790;</span>
+            </button>
         </header>
 
         <div class="main-content">
+            <!-- Input Panel -->
             <div class="panel">
                 <h2>Input</h2>
                 <form id="queryForm">
                     <div class="form-group">
                         <label for="modelSelect">Model:</label>
                         <select id="modelSelect" required>
-                            <option value="o1">OpenAI o1</option>
-                            <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                            <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                            <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
-                            <option value="gpt-4o-mini">GPT-4o Mini</option>
-                            <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
-                            <option value="deepseek/deepseek-reasoner">DeepSeek Reasoner</option>
-                            <option value="ollama/mistral">Ollama Mistral (Local)</option>
-                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                            <option value="" disabled selected>Loading models...</option>
                         </select>
                     </div>
 
@@ -519,28 +41,52 @@
                         <label for="question">Question:</label>
                         <textarea
                             id="question"
-                            placeholder="Enter your research question here... (e.g., 'How many studio albums did Björk release before 2005?')"
+                            placeholder="Enter your research question here... (e.g., 'How many studio albums did Bj&ouml;rk release before 2005?')"
                             required
                         ></textarea>
                     </div>
 
                     <div class="button-group">
-                        <button type="submit" class="btn-submit" id="submitBtn">Run Agent</button>
-                        <button type="button" class="btn-stop" id="stopBtn" style="display: none;">Stop</button>
+                        <button type="submit" class="btn-submit" id="submitBtn">
+                            Run Agent <kbd>Ctrl+Enter</kbd>
+                        </button>
+                        <button type="button" class="btn-stop" id="stopBtn" style="display: none;">
+                            Stop <kbd>Esc</kbd>
+                        </button>
                         <button type="button" class="btn-clear" id="clearBtn">Clear</button>
+                        <button type="button" class="btn-history" id="historyBtn">History</button>
                     </div>
                 </form>
 
-                <div id="status" class="status"></div>
+                <!-- History Panel -->
+                <div id="historyPanel" class="history-panel" style="display: none;">
+                    <h3>Recent Runs</h3>
+                    <div id="historyList"></div>
+                </div>
+
+                <div id="status" class="status">
+                    <span id="statusText"></span>
+                    <span id="totalElapsed" class="total-elapsed"></span>
+                </div>
             </div>
 
+            <!-- Output Panel -->
             <div class="panel">
-                <h2>Output</h2>
+                <h2>
+                    <span>Output</span>
+                    <div class="output-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="step_header">Steps</button>
+                        <button class="filter-btn" data-filter="tool_call">Tools</button>
+                        <button class="filter-btn" data-filter="plan">Plans</button>
+                        <button class="filter-btn" data-filter="code_block">Code</button>
+                        <button class="filter-btn" data-filter="observation">Results</button>
+                        <button class="filter-btn" data-filter="final_answer">Answer</button>
+                        <button class="filter-btn" data-filter="error">Errors</button>
+                    </div>
+                </h2>
                 <div id="output" class="empty">Waiting for input...</div>
-                <div id="answerBox" class="answer-box" style="display: none;">
-                    <h3>Final Answer</h3>
-                    <p id="answerText"></p>
-                </div>
+                <div id="answerBox" style="display: none;"></div>
             </div>
         </div>
 
@@ -549,388 +95,12 @@
         </footer>
     </div>
 
-    <script>
-        const form = document.getElementById('queryForm');
-        const questionInput = document.getElementById('question');
-        const modelSelect = document.getElementById('modelSelect');
-        const submitBtn = document.getElementById('submitBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const outputDiv = document.getElementById('output');
-        const statusDiv = document.getElementById('status');
-        const answerBox = document.getElementById('answerBox');
-        const answerText = document.getElementById('answerText');
-
-        // Track current stream reader for stop functionality
-        let currentReader = null;
-        let currentSessionId = null;
-        let isStopped = false;
-
-        // Function to render different output types
-        function renderOutput(data) {
-            outputDiv.classList.remove('empty');
-
-            let item;
-
-            switch (data.type) {
-                case 'action_step':
-                    item = renderActionStep(data);
-                    break;
-
-                case 'planning_step':
-                    item = renderPlanningStep(data);
-                    break;
-
-                case 'final_answer':
-                    // Only show as THE final answer if from top-level agent
-                    if (!data.agent_name) {
-                        item = document.createElement('div');
-                        item.className = 'output-item final_answer';
-                        item.textContent = data.output;
-                        answerText.textContent = data.output;
-                        answerBox.style.display = 'block';
-                    } else {
-                        // Sub-agent final answer — show as informational
-                        item = document.createElement('div');
-                        item.className = 'output-item message';
-                        item.textContent = `[${data.agent_name}] Result: ${data.output}`;
-                    }
-                    break;
-
-                case 'info':
-                    item = document.createElement('div');
-                    item.className = 'output-item info';
-                    item.textContent = data.content;
-                    break;
-
-                case 'error':
-                    item = document.createElement('div');
-                    item.className = 'output-item error';
-                    item.textContent = data.content;
-                    break;
-
-                case 'message':
-                default:
-                    item = document.createElement('div');
-                    item.className = 'output-item message';
-                    item.textContent = data.content || JSON.stringify(data);
-            }
-
-            if (item) {
-                outputDiv.appendChild(item);
-            }
-        }
-
-        function renderActionStep(data) {
-            const container = document.createElement('div');
-            container.className = 'action-step-container';
-            if (data.agent_name) {
-                container.classList.add('sub-agent');
-            }
-
-            // Step header
-            const header = document.createElement('div');
-            header.className = 'output-item step_header';
-            let headerText = `Step ${data.step_number}`;
-            if (data.agent_name) {
-                headerText += ` `;
-            }
-            header.textContent = headerText;
-            if (data.agent_name) {
-                const badge = document.createElement('span');
-                badge.className = 'agent-badge';
-                badge.textContent = data.agent_name;
-                header.appendChild(badge);
-            }
-            container.appendChild(header);
-
-            // Metrics bar
-            if (data.duration != null || data.token_usage) {
-                const metrics = document.createElement('div');
-                metrics.className = 'step-metrics';
-                const parts = [];
-                if (data.duration != null) parts.push(`Duration: ${data.duration.toFixed(1)}s`);
-                if (data.token_usage) {
-                    parts.push(`Tokens: ${data.token_usage.input_tokens.toLocaleString()} in / ${data.token_usage.output_tokens.toLocaleString()} out`);
-                }
-                metrics.textContent = parts.join(' | ');
-                container.appendChild(metrics);
-            }
-
-            // Code action (CodeAgent steps)
-            if (data.code_action) {
-                container.appendChild(
-                    createCollapsibleSection('Code', data.code_action, 'code_block', false)
-                );
-            }
-
-            // Tool calls (ToolCallingAgent steps)
-            if (data.tool_calls && data.tool_calls.length > 0) {
-                data.tool_calls.forEach(tc => {
-                    const toolDiv = document.createElement('div');
-                    toolDiv.className = 'output-item tool_call';
-
-                    const nameDiv = document.createElement('div');
-                    nameDiv.className = 'tool-name';
-                    nameDiv.textContent = tc.name;
-                    toolDiv.appendChild(nameDiv);
-
-                    if (tc.arguments != null) {
-                        const argsDiv = document.createElement('div');
-                        argsDiv.className = 'tool-args';
-                        argsDiv.textContent = typeof tc.arguments === 'string'
-                            ? tc.arguments
-                            : JSON.stringify(tc.arguments, null, 2);
-                        toolDiv.appendChild(argsDiv);
-                    }
-                    container.appendChild(toolDiv);
-                });
-            }
-
-            // Observations
-            if (data.observations) {
-                container.appendChild(
-                    createCollapsibleSection('Observations', data.observations, 'observation', false)
-                );
-            }
-
-            // Step error
-            if (data.error) {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'output-item error';
-                errorDiv.textContent = data.error;
-                container.appendChild(errorDiv);
-            }
-
-            // Action output (non-final)
-            if (data.action_output && !data.is_final_answer) {
-                container.appendChild(
-                    createCollapsibleSection('Output', data.action_output, 'code_execution', false)
-                );
-            }
-
-            return container;
-        }
-
-        function renderPlanningStep(data) {
-            const container = document.createElement('div');
-            container.className = 'planning-step-container';
-            if (data.agent_name) {
-                container.classList.add('sub-agent');
-            }
-
-            const title = data.agent_name ? `Plan (${data.agent_name})` : 'Plan';
-            const section = createCollapsibleSection(title, data.plan, 'plan', true);
-            container.appendChild(section);
-
-            // Metrics bar
-            if (data.duration != null || data.token_usage) {
-                const metrics = document.createElement('div');
-                metrics.className = 'step-metrics';
-                const parts = [];
-                if (data.duration != null) parts.push(`Duration: ${data.duration.toFixed(1)}s`);
-                if (data.token_usage) {
-                    parts.push(`Tokens: ${data.token_usage.input_tokens.toLocaleString()} in / ${data.token_usage.output_tokens.toLocaleString()} out`);
-                }
-                metrics.textContent = parts.join(' | ');
-                container.appendChild(metrics);
-            }
-
-            return container;
-        }
-
-        function createCollapsibleSection(title, content, type, expanded = false) {
-            const section = document.createElement('div');
-            section.className = `output-item ${type} collapsible-section`;
-
-            const header = document.createElement('div');
-            header.className = `collapsible-header ${expanded ? 'open' : ''}`;
-            header.innerHTML = `<span class="toggle">▶</span><span>${title}</span>`;
-
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'collapsible-content';
-            contentDiv.innerHTML = `<pre>${escapeHtml(content)}</pre>`;
-
-            header.addEventListener('click', () => {
-                header.classList.toggle('open');
-            });
-
-            section.appendChild(header);
-            section.appendChild(contentDiv);
-            return section;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Stop button
-        stopBtn.addEventListener('click', async () => {
-            if (currentReader && currentSessionId) {
-                isStopped = true;
-
-                // Call backend to stop session
-                try {
-                    await fetch(`/api/stop/${currentSessionId}`, {
-                        method: 'POST',
-                    });
-                } catch (error) {
-                    console.error('Error stopping session:', error);
-                }
-
-                // Cancel frontend stream
-                currentReader.cancel();
-                currentReader = null;
-                currentSessionId = null;
-
-                // Add stopped message
-                const stoppedItem = document.createElement('div');
-                stoppedItem.className = 'output-item error';
-                stoppedItem.innerHTML = '<strong>⏹ Stopped:</strong> Agent execution cancelled by user';
-                outputDiv.appendChild(stoppedItem);
-
-                showStatus('⏹ Stopped by user', 'error');
-                submitBtn.disabled = false;
-                stopBtn.style.display = 'none';
-            }
-        });
-
-        // Clear button
-        clearBtn.addEventListener('click', () => {
-            questionInput.value = '';
-            outputDiv.innerHTML = '';
-            outputDiv.classList.add('empty');
-            answerBox.style.display = 'none';
-            statusDiv.textContent = '';
-            statusDiv.className = 'status';
-        });
-
-        // Form submission with streaming
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const question = questionInput.value.trim();
-            const modelId = modelSelect.value;
-
-            if (!question) {
-                showStatus('Please enter a question', 'error');
-                return;
-            }
-
-            // Clear previous output
-            outputDiv.innerHTML = '';
-            outputDiv.classList.remove('empty');
-            answerBox.style.display = 'none';
-            submitBtn.disabled = true;
-            stopBtn.style.display = 'inline-block';
-            isStopped = false;
-
-            showStatus('Running agent... This may take a moment.', 'loading');
-
-            try {
-                const response = await fetch('/api/run/stream', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        question: question,
-                        model_id: modelId,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-                    showStatus(`Error: ${error.error}`, 'error');
-
-                    // Add error to output
-                    const errorItem = document.createElement('div');
-                    errorItem.className = 'output-item error';
-                    errorItem.textContent = `Server Error: ${error.error}`;
-                    outputDiv.appendChild(errorItem);
-                    outputDiv.scrollTop = outputDiv.scrollHeight;
-
-                    submitBtn.disabled = false;
-                    return;
-                }
-
-                // Stream the response
-                const reader = response.body.getReader();
-                currentReader = reader;
-                const decoder = new TextDecoder();
-                let buffer = '';
-
-                while (true) {
-                    if (isStopped) {
-                        break;
-                    }
-
-                    const { done, value } = await reader.read();
-
-                    if (done) {
-                        showStatus('✓ Completed successfully!', 'success');
-                        break;
-                    }
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-
-                    // Process complete lines
-                    for (let i = 0; i < lines.length - 1; i++) {
-                        const line = lines[i];
-                        if (line.startsWith('data: ')) {
-                            const jsonStr = line.slice(6);
-                            try {
-                                const jsonData = JSON.parse(jsonStr);
-
-                                if (jsonData.session_id) {
-                                    // Capture session ID from first message
-                                    currentSessionId = jsonData.session_id;
-                                } else if (jsonData.done) {
-                                    // Stream complete
-                                    break;
-                                } else {
-                                    // Render the structured output
-                                    renderOutput(jsonData);
-                                    outputDiv.scrollTop = outputDiv.scrollHeight;
-                                }
-                            } catch (e) {
-                                console.error('Failed to parse:', jsonStr, e);
-                            }
-                        }
-                    }
-
-                    // Keep the last incomplete line in the buffer
-                    buffer = lines[lines.length - 1];
-                }
-            } catch (error) {
-                // Show error banner but keep existing output
-                showStatus(`⚠️ Connection Error: ${error.message}`, 'error');
-
-                // Add error message to output
-                const errorItem = document.createElement('div');
-                errorItem.className = 'output-item error';
-                errorItem.textContent = `Network Error: ${error.message}`;
-                outputDiv.appendChild(errorItem);
-                outputDiv.scrollTop = outputDiv.scrollHeight;
-            } finally {
-                submitBtn.disabled = false;
-                stopBtn.style.display = 'none';
-                currentReader = null;
-                currentSessionId = null;
-            }
-        });
-
-        function showStatus(message, type) {
-            statusDiv.className = `status ${type}`;
-            if (type === 'loading') {
-                statusDiv.innerHTML = `<span class="spinner"></span> ${message}`;
-            } else {
-                statusDiv.textContent = message;
-            }
-        }
-    </script>
+    <!-- Application Scripts -->
+    {% set cache_bust = range(1, 999999) | random %}
+    <script src="{{ url_for('static', filename='js/utils.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/renderer.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/history.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/shortcuts.js') }}?v={{ cache_bust }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ cache_bust }}"></script>
 </body>
 </html>

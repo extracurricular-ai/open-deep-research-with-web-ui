@@ -56,8 +56,10 @@ def delete_session_file(session_id):
         session_file.unlink()
 
 
-def read_process_output(process, queue):
-    """Read JSON lines from process stdout and queue them."""
+def read_process_output(process, queue, stderr_done_event):
+    """Read JSON lines from process stdout and queue them.
+    Waits for stderr thread to finish before sending end-of-stream,
+    so any error captured from stderr is queued first."""
     try:
         for line in iter(process.stdout.readline, b''):
             if line:
@@ -73,17 +75,30 @@ def read_process_output(process, queue):
     except Exception as e:
         queue.put({"type": "error", "content": f"Error reading process output: {e}"})
     finally:
+        # Wait for stderr thread to finish so errors are queued before end-of-stream
+        stderr_done_event.wait(timeout=10)
         queue.put(None)  # Signal end of stream
 
 
-def drain_stderr(process):
-    """Read stderr for debug logging, prevent pipe buffer deadlock."""
+def drain_stderr(process, queue, stderr_done_event):
+    """Read stderr and capture it. Send errors to the queue so the client sees them."""
+    stderr_lines = []
     try:
         for line in iter(process.stderr.readline, b''):
             if line:
-                print(f"[agent] {line.decode('utf-8', errors='replace')}", end='')
+                text = line.decode('utf-8', errors='replace').rstrip()
+                print(f"[agent] {text}")
+                stderr_lines.append(text)
     except Exception:
         pass
+    finally:
+        # After stderr closes, check if process failed
+        process.wait()
+        if process.returncode and process.returncode != 0:
+            # Collect meaningful error lines (skip blank lines, tracebacks are useful)
+            error_msg = '\n'.join(stderr_lines[-20:]) if stderr_lines else f"Agent process exited with code {process.returncode}"
+            queue.put({"type": "error", "content": error_msg})
+        stderr_done_event.set()
 
 
 @app.route("/")
@@ -133,18 +148,21 @@ def run_agent_stream():
                 'queue': output_queue
             }
 
+        # Shared event so stdout reader waits for stderr to finish
+        stderr_done = threading.Event()
+
         # Start thread to read JSON lines from process stdout
         reader_thread = threading.Thread(
             target=read_process_output,
-            args=(process, output_queue),
+            args=(process, output_queue, stderr_done),
             daemon=True
         )
         reader_thread.start()
 
-        # Drain stderr to prevent pipe buffer deadlock
+        # Drain stderr and capture errors for the client
         stderr_thread = threading.Thread(
             target=drain_stderr,
-            args=(process,),
+            args=(process, output_queue, stderr_done),
             daemon=True
         )
         stderr_thread.start()

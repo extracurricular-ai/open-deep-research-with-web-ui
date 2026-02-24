@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import os
 import sys
 import threading
@@ -61,6 +62,55 @@ def emit_event(event_type, **data):
         sys.stderr.write(f"emit_event error: {e}\n")
 
 
+def _extract_model_reasoning(step):
+    """Extract LLM reasoning text from model_output, excluding code blocks.
+
+    model_output can be:
+      - str: plain reasoning text
+      - list[dict]: content blocks like [{"type":"text","text":"..."}]
+      - None: model produced only tool calls with no text
+
+    For CodeAgent: model_output includes the code block which is already
+    in code_action, so we strip it out to get just the reasoning.
+    """
+    import re
+
+    raw = step.model_output
+    if raw is None:
+        return None
+
+    # Handle list of content blocks (e.g. [{"type":"text","text":"..."}])
+    if isinstance(raw, list):
+        parts = []
+        for block in raw:
+            if isinstance(block, dict) and block.get("type") == "text":
+                t = block.get("text", "").strip()
+                if t:
+                    parts.append(t)
+        text = "\n".join(parts)
+    elif isinstance(raw, str):
+        text = raw.strip()
+    else:
+        return None
+
+    if not text:
+        return None
+
+    # If there's a code_action, the model_output contains it embedded in
+    # code block tags. Strip the code block to get just the reasoning.
+    if step.code_action:
+        # Remove fenced code blocks (```...```)
+        text = re.sub(r'```[\s\S]*?```', '', text).strip()
+        # Remove smolagents code block tags (<code>...</code> variants)
+        text = re.sub(r'<[^>]*code[^>]*>[\s\S]*?</[^>]*code[^>]*>', '', text, flags=re.IGNORECASE).strip()
+
+    # Strip raw tool-call JSON that leaks into model_output when the agent
+    # is interrupted mid-generation (e.g. "Calling tools:\n[{...}]")
+    text = re.sub(r'Calling tools:\s*\[[\s\S]*', '', text).strip()
+
+    return text if text else None
+
+
 def on_action_step(step, agent=None):
     """Callback for ActionStep — emits structured step data."""
     agent_name = getattr(agent, 'name', None) if agent else None
@@ -73,10 +123,20 @@ def on_action_step(step, agent=None):
                 "arguments": tc.arguments,
             })
 
+    model_reasoning = _extract_model_reasoning(step)
+
+    # Debug: log model_output type and presence to stderr
+    import sys
+    raw_mo = step.model_output
+    print(f"[debug] step={step.step_number} agent={agent_name} model_output type={type(raw_mo).__name__} "
+          f"len={len(raw_mo) if raw_mo else 0} reasoning={'yes' if model_reasoning else 'no'}",
+          file=sys.stderr)
+
     emit_event(
         "action_step",
         step_number=step.step_number,
         agent_name=agent_name,
+        model_output=_truncate(model_reasoning) if model_reasoning else None,
         tool_calls=tool_calls_data,
         code_action=step.code_action,
         observations=_truncate(step.observations),
@@ -116,9 +176,31 @@ _step_callbacks = {
     FinalAnswerStep: on_final_answer,
 }
 
-# Silent logger that discards all Rich terminal output
-_devnull = open(os.devnull, "w")
-_silent_logger = AgentLogger(level=0, console=Console(file=_devnull, highlight=False))
+class StreamingLogger(AgentLogger):
+    """Custom logger that emits lightweight JSON events for real-time UI feedback.
+
+    Only emits code_running (from log_code) which fires right before the
+    CodeAgent executes generated code. This fills the UI gap between the LLM
+    response and the step_callback result.
+
+    We intentionally do NOT emit events from log_rule or log_task because:
+    - log_rule fires for every agent's step but carries no agent_name, so the
+      renderer can't place it in the correct nesting context (causes duplicate
+      step containers at wrong levels).
+    - log_task fires when sub-agents launch, but step_callbacks already carry
+      agent_name which drives sub-agent nesting correctly.
+    """
+
+    def __init__(self):
+        _devnull = open(os.devnull, "w")
+        super().__init__(level=0, console=Console(file=_devnull, highlight=False))
+
+    def log_code(self, title, content, level=0):
+        """Fired when code is about to be executed."""
+        emit_event("code_running", title=title, code=_truncate(content, 2000))
+
+
+_streaming_logger = StreamingLogger()
 
 
 load_dotenv(override=True)
@@ -293,7 +375,7 @@ def create_agent(model_id="o1"):
     """,
         provide_run_summary=True,
         step_callbacks=_step_callbacks,
-        logger=_silent_logger,
+        logger=_streaming_logger,
     )
     text_webbrowser_agent.prompt_templates["managed_agent"]["task"] += """You can navigate to .txt online files.
     If a non-html page is in another format, especially .pdf or a Youtube video, use tool 'inspect_file_as_text' to inspect it.
@@ -318,7 +400,37 @@ def create_agent(model_id="o1"):
         planning_interval=4,
         managed_agents=[text_webbrowser_agent],
         step_callbacks=_step_callbacks,
-        logger=_silent_logger,
+        logger=_streaming_logger,
+    )
+    # Inject custom instructions into the system prompt template.
+    # This nudges the CodeAgent to use Python execution for things it can
+    # compute directly (dates, math, parsing) instead of delegating everything.
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    manager_agent.prompt_templates["system_prompt"] = (
+        manager_agent.prompt_templates["system_prompt"].rstrip()
+        + "\n\n"
+        + f"Current date and time: {now}\n\n"
+        + "You can execute Python code directly — use this whenever it is more "
+        "efficient than delegating to search_agent. For example: use datetime "
+        "to get the current date/time, use math/statistics for calculations, "
+        "use json/re to parse or transform data, and use string operations to "
+        "process text. Prepare as much context as possible in code (dates, "
+        "computed values, formatted queries) before delegating web searches to "
+        "search_agent, and pass that context in the task description. "
+        "When providing the final answer, include all important details, "
+        "findings, and sources from the search results. Do not over-summarize "
+        "or omit key information gathered by search_agent. "
+        "The final answer MUST include references (URLs/links) for all "
+        "information when available. Use markdown link format for references.\n\n"
+        "Example final answer format:\n"
+        "Mercedes Sosa released **40 studio albums** before 2007.\n\n"
+        "Key albums include:\n"
+        "- *La voz de la zafra* (1961)\n"
+        "- *Canciones con fundamento* (1965)\n"
+        "- *Corazón libre* (2005)\n\n"
+        "**References:**\n"
+        "- [Mercedes Sosa discography - Wikipedia](https://en.wikipedia.org/wiki/Mercedes_Sosa_discography)\n"
+        "- [Mercedes Sosa - AllMusic](https://www.allmusic.com/artist/mercedes-sosa)\n"
     )
 
     return manager_agent
