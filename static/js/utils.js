@@ -1,11 +1,12 @@
 /**
  * Utility functions for Open Deep Research UI
+ * ES module — imported by components
  */
 
 /**
  * Escape HTML entities to prevent XSS
  */
-function escapeHtml(text) {
+export function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -15,10 +16,9 @@ function escapeHtml(text) {
  * Render markdown text to sanitized HTML
  * Uses marked.js for parsing and DOMPurify for sanitization
  */
-function renderMarkdown(text) {
+export function renderMarkdown(text) {
     if (!text) return '';
     if (typeof marked === 'undefined') {
-        // Fallback if marked.js not loaded
         return escapeHtml(text).replace(/\n/g, '<br>');
     }
 
@@ -42,9 +42,27 @@ function renderMarkdown(text) {
 
     const html = marked.parse(text);
 
-    // Sanitize with DOMPurify if available
     if (typeof DOMPurify !== 'undefined') {
-        return DOMPurify.sanitize(html);
+        return DOMPurify.sanitize(html, {
+            // Strip inline styles (blocks position:absolute, z-index hacks, etc.)
+            FORBID_ATTR: ['style'],
+            // Strip layout-breaking and ad-related tags
+            FORBID_TAGS: ['iframe', 'object', 'embed', 'form', 'input', 'button', 'section'],
+            // Only allow safe content tags
+            ALLOWED_TAGS: [
+                'a', 'b', 'i', 'em', 'strong', 'p', 'br', 'hr', 'div', 'span',
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+                'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                'pre', 'code', 'blockquote',
+                'img', 'del', 'ins', 'sub', 'sup', 'mark',
+            ],
+            // Only allow safe attributes
+            ALLOWED_ATTR: [
+                'href', 'title', 'alt', 'src', 'class', 'id',
+                'target', 'rel', 'width', 'height',
+            ],
+        });
     }
     return html;
 }
@@ -52,7 +70,7 @@ function renderMarkdown(text) {
 /**
  * Format elapsed seconds into human-readable string
  */
-function formatElapsedTime(seconds) {
+export function formatElapsedTime(seconds) {
     if (seconds < 60) return `${seconds}s`;
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -65,7 +83,7 @@ function formatElapsedTime(seconds) {
 /**
  * Copy text to clipboard and show feedback on button
  */
-function copyToClipboard(text, buttonEl) {
+export function copyToClipboard(text, buttonEl) {
     navigator.clipboard.writeText(text).then(() => {
         const original = buttonEl.textContent;
         buttonEl.textContent = 'Copied!';
@@ -75,7 +93,6 @@ function copyToClipboard(text, buttonEl) {
             buttonEl.style.opacity = '';
         }, 2000);
     }).catch(() => {
-        // Fallback for older browsers
         const textarea = document.createElement('textarea');
         textarea.value = text;
         textarea.style.position = 'fixed';
@@ -94,7 +111,7 @@ function copyToClipboard(text, buttonEl) {
 /**
  * Syntax-highlight JSON string using highlight.js
  */
-function highlightJson(jsonStr) {
+export function highlightJson(jsonStr) {
     if (typeof hljs !== 'undefined') {
         try {
             return hljs.highlight(jsonStr, { language: 'json' }).value;
