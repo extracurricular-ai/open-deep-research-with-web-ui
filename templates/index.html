@@ -1,106 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Open Deep Research - Web UI</title>
+    <title>Open Deep Research</title>
 
-    <!-- Styles -->
+    <!-- Open Props (design tokens) -->
+    <link rel="stylesheet" href="https://unpkg.com/open-props/open-props.min.css">
+
+    <!-- Highlight.js theme -->
+    <link id="highlight-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+
+    <!-- App styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ range(1, 999999) | random }}">
-    <link id="highlight-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 
-    <!-- CDN Libraries -->
+    <!-- CDN Libraries (UMD — available as globals) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
+    <!-- Import map for ES modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "preact": "https://esm.sh/preact@10.25.4",
+            "preact/hooks": "https://esm.sh/preact@10.25.4/hooks",
+            "htm": "https://esm.sh/htm@3.1.1"
+        }
+    }
+    </script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Open Deep Research</h1>
-            <p>AI-powered research and question answering</p>
-            <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
-                <span class="theme-icon-light">&#9788;</span>
-                <span class="theme-icon-dark">&#9790;</span>
-            </button>
-        </header>
+    <div id="app"></div>
 
-        <div class="main-content">
-            <!-- Input Panel -->
-            <div class="panel">
-                <h2>Input</h2>
-                <form id="queryForm">
-                    <div class="form-group">
-                        <label for="modelSelect">Model:</label>
-                        <select id="modelSelect" required>
-                            <option value="" disabled selected>Loading models...</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="question">Question:</label>
-                        <textarea
-                            id="question"
-                            placeholder="Enter your research question here... (e.g., 'How many studio albums did Bj&ouml;rk release before 2005?')"
-                            required
-                        ></textarea>
-                    </div>
-
-                    <div class="button-group">
-                        <button type="submit" class="btn-submit" id="submitBtn">
-                            Run Agent <kbd>Ctrl+Enter</kbd>
-                        </button>
-                        <button type="button" class="btn-stop" id="stopBtn" style="display: none;">
-                            Stop <kbd>Esc</kbd>
-                        </button>
-                        <button type="button" class="btn-clear" id="clearBtn">Clear</button>
-                        <button type="button" class="btn-history" id="historyBtn">History</button>
-                    </div>
-                </form>
-
-                <!-- History Panel -->
-                <div id="historyPanel" class="history-panel" style="display: none;">
-                    <h3>Recent Runs</h3>
-                    <div id="historyList"></div>
-                </div>
-
-                <div id="status" class="status">
-                    <span id="statusText"></span>
-                    <span id="totalElapsed" class="total-elapsed"></span>
-                </div>
-            </div>
-
-            <!-- Output Panel -->
-            <div class="panel">
-                <h2>
-                    <span>Output</span>
-                    <div class="output-filters">
-                        <button class="filter-btn active" data-filter="all">All</button>
-                        <button class="filter-btn" data-filter="step_header">Steps</button>
-                        <button class="filter-btn" data-filter="tool_call">Tools</button>
-                        <button class="filter-btn" data-filter="plan">Plans</button>
-                        <button class="filter-btn" data-filter="code_block">Code</button>
-                        <button class="filter-btn" data-filter="observation">Results</button>
-                        <button class="filter-btn" data-filter="final_answer">Answer</button>
-                        <button class="filter-btn" data-filter="error">Errors</button>
-                    </div>
-                </h2>
-                <div id="output" class="empty">Waiting for input...</div>
-                <div id="answerBox" style="display: none;"></div>
-            </div>
-        </div>
-
-        <footer>
-            <p>Powered by smolagents and LiteLLM</p>
-        </footer>
-    </div>
-
-    <!-- Application Scripts -->
+    <!-- Application entry point (ES module) -->
     {% set cache_bust = range(1, 999999) | random %}
-    <script src="{{ url_for('static', filename='js/utils.js') }}?v={{ cache_bust }}"></script>
-    <script src="{{ url_for('static', filename='js/renderer.js') }}?v={{ cache_bust }}"></script>
-    <script src="{{ url_for('static', filename='js/history.js') }}?v={{ cache_bust }}"></script>
-    <script src="{{ url_for('static', filename='js/shortcuts.js') }}?v={{ cache_bust }}"></script>
-    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ cache_bust }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/app.js') }}?v={{ cache_bust }}"></script>
 </body>
 </html>
