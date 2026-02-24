@@ -501,7 +501,7 @@ button {
 .output-item.final_answer {
     background: linear-gradient(135deg, var(--final-gradient-start) 0%, var(--final-gradient-end) 100%);
     color: white;
-    padding: 24px;
+    padding: 28px 32px;
     border-radius: 8px;
     margin: 0;
     box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
@@ -526,9 +526,16 @@ button {
     line-height: 1.7;
     overflow-wrap: break-word;
     word-break: break-word;
+    padding: 0;
 }
 
 .output-item.final_answer .final-answer-content p {
+    margin-bottom: 0.5em;
+}
+
+.output-item.final_answer .final-answer-content ul,
+.output-item.final_answer .final-answer-content ol {
+    padding-left: 1.5em;
     margin-bottom: 0.5em;
 }
 

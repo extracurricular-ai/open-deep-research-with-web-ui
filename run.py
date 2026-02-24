@@ -419,7 +419,18 @@ def create_agent(model_id="o1"):
         "search_agent, and pass that context in the task description. "
         "When providing the final answer, include all important details, "
         "findings, and sources from the search results. Do not over-summarize "
-        "or omit key information gathered by search_agent."
+        "or omit key information gathered by search_agent. "
+        "The final answer MUST include references (URLs/links) for all "
+        "information when available. Use markdown link format for references.\n\n"
+        "Example final answer format:\n"
+        "Mercedes Sosa released **40 studio albums** before 2007.\n\n"
+        "Key albums include:\n"
+        "- *La voz de la zafra* (1961)\n"
+        "- *Canciones con fundamento* (1965)\n"
+        "- *Corazón libre* (2005)\n\n"
+        "**References:**\n"
+        "- [Mercedes Sosa discography - Wikipedia](https://en.wikipedia.org/wiki/Mercedes_Sosa_discography)\n"
+        "- [Mercedes Sosa - AllMusic](https://www.allmusic.com/artist/mercedes-sosa)\n"
     )
 
     return manager_agent
