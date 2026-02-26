@@ -1,10 +1,9 @@
 import { html } from '../htm.js';
 import {
     useStore, setState,
-    startStream, stopStream, resetState,
+    startStream, stopStream, resetState, newSession,
 } from '../state.js';
 import { StatusBar } from './StatusBar.js';
-import { HistoryPanel } from './HistoryPanel.js';
 
 export function InputPanel() {
     const store = useStore();
@@ -19,13 +18,15 @@ export function InputPanel() {
         setState({ question: '' });
     }
 
-    function onToggleHistory() {
-        setState({ historyOpen: !store.historyOpen });
-    }
-
     return html`
         <div class="panel input-panel">
             <h2>Input</h2>
+            ${store.viewingHistory && html`
+                <div class="history-badge">
+                    Viewing saved session
+                    <button class="btn btn-ghost btn-sm" onClick=${newSession}>New Session</button>
+                </div>
+            `}
             <form onSubmit=${onSubmit}>
                 <div class="form-group">
                     <label for="modelSelect">Model</label>
@@ -69,11 +70,8 @@ export function InputPanel() {
                         </button>
                     `}
                     <button type="button" class="btn btn-ghost" onClick=${onClear}>Clear</button>
-                    <button type="button" class="btn btn-ghost" onClick=${onToggleHistory}>History</button>
                 </div>
             </form>
-
-            ${store.historyOpen && html`<${HistoryPanel} />`}
             <${StatusBar} />
         </div>
     `;

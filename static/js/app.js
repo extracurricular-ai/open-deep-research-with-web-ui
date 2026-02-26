@@ -5,20 +5,29 @@
 import { render } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { html } from './htm.js';
-import { getState, setState, loadModels, startStream, stopStream, resetState } from './state.js';
+import {
+    getState, setState, useStore,
+    loadModels, loadSessions, migrateLocalStorageHistory,
+    startStream, stopStream, resetState, toggleSidebar,
+} from './state.js';
 import { Header } from './components/Header.js';
+import { Sidebar } from './components/Sidebar.js';
 import { InputPanel } from './components/InputPanel.js';
 import { OutputPanel } from './components/OutputPanel.js';
 
 function App() {
+    const sidebarOpen = useStore(s => s.sidebarOpen);
+
     // Initialize theme on mount
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', getState().theme);
     }, []);
 
-    // Load models on mount
+    // Load models and sessions on mount
     useEffect(() => {
         loadModels();
+        loadSessions();
+        migrateLocalStorageHistory();
     }, []);
 
     // Global keyboard shortcuts
@@ -44,6 +53,10 @@ function App() {
                 resetState();
                 setState({ question: '' });
             }
+            if (isMod && e.key === 'b') {
+                e.preventDefault();
+                toggleSidebar();
+            }
         }
 
         document.addEventListener('keydown', onKeyDown);
@@ -51,15 +64,20 @@ function App() {
     }, []);
 
     return html`
-        <div class="container">
-            <${Header} />
-            <div class="main-content">
-                <${InputPanel} />
-                <${OutputPanel} />
+        <div class="app-layout">
+            <${Sidebar} />
+            <div class="app-main">
+                <div class="container">
+                    <${Header} />
+                    <div class="main-content">
+                        <${InputPanel} />
+                        <${OutputPanel} />
+                    </div>
+                    <footer>
+                        <p>Powered by smolagents and LiteLLM</p>
+                    </footer>
+                </div>
             </div>
-            <footer>
-                <p>Powered by smolagents and LiteLLM</p>
-            </footer>
         </div>
     `;
 }

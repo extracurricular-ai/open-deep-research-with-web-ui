@@ -23,6 +23,13 @@ const state = {
     question: '',
     finalAnswer: null,
     totalStartTime: null,
+
+    // Sidebar session management
+    sessions: [],
+    sessionsLoading: false,
+    activeSessionId: null,
+    viewingHistory: false,
+    sidebarOpen: true,
 };
 
 const listeners = new Set();
@@ -265,6 +272,8 @@ export async function startStream() {
         isRunning: true,
         totalStartTime: Date.now(),
         status: { message: 'Running agent...', type: 'loading' },
+        viewingHistory: false,
+        activeSessionId: null,
     });
 
     let hasError = false;
@@ -342,7 +351,13 @@ export async function startStream() {
         setState({ isRunning: false });
         currentReader = null;
 
-        saveToHistory(q, model, state.finalAnswer);
+        // Refresh sidebar session list (backend persists sessions now)
+        loadSessions();
+
+        // Highlight the just-completed session in sidebar
+        if (state.sessionId) {
+            setState({ activeSessionId: state.sessionId });
+        }
     }
 }
 
@@ -378,29 +393,90 @@ export function toggleTheme() {
     }
 }
 
-// ===== History Management =====
-const HISTORY_KEY = 'open_deep_research_history';
-const MAX_HISTORY = 20;
+// ===== Session Management =====
 
-function saveToHistory(questionText, modelId, answer) {
-    const history = getHistory();
-    history.unshift({
-        id: Date.now(),
-        question: questionText,
-        modelId: modelId,
-        timestamp: new Date().toISOString(),
-        finalAnswer: answer ? answer.substring(0, 500) : null,
-    });
-    if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+export async function loadSessions() {
+    setState({ sessionsLoading: true });
     try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        const response = await fetch('/api/sessions?limit=50');
+        if (!response.ok) throw new Error('Failed to load sessions');
+        const data = await response.json();
+        setState({ sessions: data, sessionsLoading: false });
     } catch (e) {
-        history.length = Math.floor(MAX_HISTORY / 2);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        console.error('Failed to load sessions:', e);
+        setState({ sessionsLoading: false });
     }
 }
 
-export function getHistory() {
+export async function loadSession(sessionId) {
+    if (state.activeSessionId === sessionId && state.viewingHistory) return;
+    if (state.isRunning) return;
+
+    setState({ status: { message: 'Loading session...', type: 'loading' } });
+
+    try {
+        const response = await fetch(`/api/sessions/${sessionId}`);
+        if (!response.ok) throw new Error('Session not found');
+        const session = await response.json();
+
+        cachedEvents = null;
+        cachedTree = [];
+
+        setState({
+            events: session.events || [],
+            question: session.question,
+            selectedModel: session.model_id,
+            sessionId: sessionId,
+            activeSessionId: sessionId,
+            viewingHistory: true,
+            isRunning: false,
+            isStopped: false,
+            finalAnswer: session.final_answer || null,
+            status: {
+                message: `Session from ${new Date(session.created_at).toLocaleString()} (${session.status})`,
+                type: session.status === 'completed' ? 'success' : 'error',
+            },
+            totalStartTime: null,
+        });
+    } catch (e) {
+        setState({
+            status: { message: `Error loading session: ${e.message}`, type: 'error' },
+        });
+    }
+}
+
+export async function deleteSession(sessionId) {
+    try {
+        const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Failed to delete');
+
+        setState({
+            sessions: state.sessions.filter(s => s.id !== sessionId),
+        });
+
+        if (state.activeSessionId === sessionId) {
+            resetState();
+            setState({ question: '', activeSessionId: null, viewingHistory: false });
+        }
+    } catch (e) {
+        console.error('Failed to delete session:', e);
+    }
+}
+
+export function newSession() {
+    if (state.isRunning) return;
+    resetState();
+    setState({ question: '', activeSessionId: null, viewingHistory: false });
+}
+
+export function toggleSidebar() {
+    setState({ sidebarOpen: !state.sidebarOpen });
+}
+
+// ===== Legacy History Migration =====
+const HISTORY_KEY = 'open_deep_research_history';
+
+function getHistory() {
     try {
         return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
     } catch {
@@ -408,6 +484,27 @@ export function getHistory() {
     }
 }
 
-export function clearHistory() {
-    localStorage.removeItem(HISTORY_KEY);
+export async function migrateLocalStorageHistory() {
+    const MIGRATION_KEY = 'odr_history_migrated';
+    if (localStorage.getItem(MIGRATION_KEY)) return;
+
+    const history = getHistory();
+    if (history.length === 0) {
+        localStorage.setItem(MIGRATION_KEY, '1');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/sessions/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: history }),
+        });
+        if (response.ok) {
+            localStorage.setItem(MIGRATION_KEY, '1');
+            loadSessions();
+        }
+    } catch (e) {
+        console.error('Migration failed:', e);
+    }
 }

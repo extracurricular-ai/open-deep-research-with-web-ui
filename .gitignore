@@ -59,6 +59,11 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# Session database
+odr_sessions.db
+odr_sessions.db-wal
+odr_sessions.db-shm
+
 # Flask stuff:
 instance/
 .webassets-cache

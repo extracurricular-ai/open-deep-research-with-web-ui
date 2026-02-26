@@ -15,10 +15,21 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, stream_with_context, Response
 from flask_cors import CORS
 
+from db import (
+    init_db, create_session as db_create_session, append_event,
+    complete_session, list_sessions, get_session, delete_session as db_delete_session,
+)
+
 load_dotenv(override=True)
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
+
+# Initialize session database (graceful degradation if it fails)
+try:
+    init_db()
+except Exception as e:
+    print(f"Warning: Failed to initialize database: {e}")
 
 # Session tracking directory (shared across all workers)
 SESSION_DIR = Path(tempfile.gettempdir()) / "open_deep_research_sessions"
@@ -169,6 +180,16 @@ def run_agent_stream():
 
         # Stream responses
         def generate():
+            event_counter = 0
+            session_final_answer = None
+            interrupted = False
+
+            # Persist session to database
+            try:
+                db_create_session(session_id, question, model_id)
+            except Exception as db_err:
+                print(f"DB: Failed to create session: {db_err}")
+
             try:
                 # Send session_id as first message
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
@@ -178,10 +199,23 @@ def run_agent_stream():
                     if item is None:  # End of stream
                         yield f"data: {json.dumps({'done': True})}\n\n"
                         break
+
+                    # Persist event to database
+                    try:
+                        append_event(session_id, event_counter, item)
+                        event_counter += 1
+                    except Exception as db_err:
+                        print(f"DB: Failed to append event: {db_err}")
+
+                    # Track final answer for session summary
+                    if item.get('type') == 'final_answer' and not item.get('agent_name'):
+                        session_final_answer = (item.get('output') or item.get('content', ''))[:5000]
+
                     # Item is a structured JSON event from run.py callbacks
                     yield f"data: {json.dumps(item)}\n\n"
 
             except GeneratorExit:
+                interrupted = True
                 # Client disconnected (closed browser, navigated away, network error)
                 print(f"⚠️ Client disconnected for session {session_id}, cleaning up...")
 
@@ -196,6 +230,12 @@ def run_agent_stream():
                                 process.wait(timeout=1)
                             except:
                                 pass
+
+                # Mark session as interrupted in DB
+                try:
+                    complete_session(session_id, final_answer=session_final_answer, status='interrupted')
+                except Exception:
+                    pass
                 raise  # Re-raise to properly close the generator
 
             finally:
@@ -204,6 +244,13 @@ def run_agent_stream():
                     if session_id in active_sessions:
                         del active_sessions[session_id]
                 delete_session_file(session_id)
+
+                # Mark session as completed in DB (skip if already marked as interrupted)
+                if not interrupted:
+                    try:
+                        complete_session(session_id, final_answer=session_final_answer, status='completed')
+                    except Exception:
+                        pass
 
         return Response(
             stream_with_context(generate()),
@@ -302,6 +349,64 @@ def get_models():
         },
     ]
     return jsonify(models)
+
+
+# ===== Session History API =====
+
+@app.route("/api/sessions", methods=["GET"])
+def api_list_sessions():
+    """Return paginated session list for sidebar"""
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        sessions = list_sessions(limit=min(limit, 100), offset=offset)
+        return jsonify(sessions)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/<session_id>", methods=["GET"])
+def api_get_session(session_id):
+    """Return a single session with all events for replay"""
+    try:
+        session = get_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+        return jsonify(session)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/<session_id>", methods=["DELETE"])
+def api_delete_session(session_id):
+    """Delete a session and its events"""
+    try:
+        deleted = db_delete_session(session_id)
+        if not deleted:
+            return jsonify({"error": "Session not found"}), 404
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/import", methods=["POST"])
+def api_import_sessions():
+    """Import legacy localStorage history entries (no event replay)."""
+    try:
+        data = request.json
+        items = data.get('items', [])
+        imported = 0
+        for item in items:
+            sid = str(uuid.uuid4())
+            try:
+                db_create_session(sid, item['question'], item.get('modelId', 'unknown'))
+                complete_session(sid, final_answer=item.get('finalAnswer'), status='imported')
+                imported += 1
+            except Exception:
+                pass
+        return jsonify({"imported": imported})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
