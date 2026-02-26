@@ -325,7 +325,8 @@ export async function startStream() {
                         const jsonData = JSON.parse(jsonStr);
 
                         if (jsonData.session_id) {
-                            setState({ sessionId: jsonData.session_id });
+                            setState({ sessionId: jsonData.session_id, activeSessionId: jsonData.session_id });
+                            loadSessions();
                         } else if (jsonData.done) {
                             break;
                         } else {
@@ -473,38 +474,3 @@ export function toggleSidebar() {
     setState({ sidebarOpen: !state.sidebarOpen });
 }
 
-// ===== Legacy History Migration =====
-const HISTORY_KEY = 'open_deep_research_history';
-
-function getHistory() {
-    try {
-        return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
-    } catch {
-        return [];
-    }
-}
-
-export async function migrateLocalStorageHistory() {
-    const MIGRATION_KEY = 'odr_history_migrated';
-    if (localStorage.getItem(MIGRATION_KEY)) return;
-
-    const history = getHistory();
-    if (history.length === 0) {
-        localStorage.setItem(MIGRATION_KEY, '1');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/sessions/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: history }),
-        });
-        if (response.ok) {
-            localStorage.setItem(MIGRATION_KEY, '1');
-            loadSessions();
-        }
-    } catch (e) {
-        console.error('Migration failed:', e);
-    }
-}

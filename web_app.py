@@ -105,9 +105,10 @@ def drain_stderr(process, queue, stderr_done_event):
     finally:
         # After stderr closes, check if process failed
         process.wait()
-        if process.returncode and process.returncode != 0:
-            # Collect meaningful error lines (skip blank lines, tracebacks are useful)
-            error_msg = '\n'.join(stderr_lines[-20:]) if stderr_lines else f"Agent process exited with code {process.returncode}"
+        rc = process.returncode
+        # Only report errors for genuine failures, not when killed by signal (negative rc)
+        if rc and rc > 0:
+            error_msg = '\n'.join(stderr_lines[-20:]) if stderr_lines else f"Agent process exited with code {rc}"
             queue.put({"type": "error", "content": error_msg})
         stderr_done_event.set()
 
@@ -385,26 +386,6 @@ def api_delete_session(session_id):
         if not deleted:
             return jsonify({"error": "Session not found"}), 404
         return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/sessions/import", methods=["POST"])
-def api_import_sessions():
-    """Import legacy localStorage history entries (no event replay)."""
-    try:
-        data = request.json
-        items = data.get('items', [])
-        imported = 0
-        for item in items:
-            sid = str(uuid.uuid4())
-            try:
-                db_create_session(sid, item['question'], item.get('modelId', 'unknown'))
-                complete_session(sid, final_answer=item.get('finalAnswer'), status='imported')
-                imported += 1
-            except Exception:
-                pass
-        return jsonify({"imported": imported})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

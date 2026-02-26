@@ -7,7 +7,7 @@ import { useEffect } from 'preact/hooks';
 import { html } from './htm.js';
 import {
     getState, setState, useStore,
-    loadModels, loadSessions, migrateLocalStorageHistory,
+    loadModels, loadSessions,
     startStream, stopStream, resetState, toggleSidebar,
 } from './state.js';
 import { Header } from './components/Header.js';
@@ -27,7 +27,6 @@ function App() {
     useEffect(() => {
         loadModels();
         loadSessions();
-        migrateLocalStorageHistory();
     }, []);
 
     // Global keyboard shortcuts

@@ -506,9 +506,9 @@ select {
     text-overflow: ellipsis;
 }
 
-/* Sidebar hamburger in header (mobile only by default) */
+/* Sidebar hamburger in header (visible when sidebar is closed) */
 .sidebar-hamburger {
-    display: none;
+    display: flex;
 }
 
 /* History badge shown when viewing a saved session */
