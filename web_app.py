@@ -279,6 +279,12 @@ def stop_session(session_id):
         agent_pid = session_data['agent_pid']
         worker_pid = session_data['worker_pid']
 
+        # Mark session as stopped in DB before killing processes
+        try:
+            complete_session(session_id, status='stopped')
+        except Exception:
+            pass
+
         # Kill the agent subprocess
         try:
             os.kill(agent_pid, signal.SIGKILL)
