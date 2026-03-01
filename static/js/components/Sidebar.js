@@ -34,6 +34,7 @@ export function Sidebar() {
     const isRunning = useStore(s => s.isRunning);
     const sessionsLoading = useStore(s => s.sessionsLoading);
     const sidebarOpen = useStore(s => s.sidebarOpen);
+    const runMode = useStore(s => s.runMode);
 
     function onDelete(e, sessionId) {
         e.stopPropagation();
@@ -54,7 +55,7 @@ export function Sidebar() {
             <button
                 class="btn btn-submit sidebar-new-btn"
                 onClick=${newSession}
-                disabled=${isRunning}
+                disabled=${isRunning && runMode === 'auto-kill'}
             >
                 + New Session
             </button>
@@ -85,6 +86,9 @@ export function Sidebar() {
                         </div>
                         <div class="sidebar-item-meta">
                             ${formatDate(s.created_at)} \u2022 ${s.model_id}
+                            ${s.status === 'running' && html`
+                                <span class="sidebar-live-badge">LIVE</span>
+                            `}
                         </div>
                         ${s.final_answer_preview && html`
                             <div class="sidebar-item-preview">

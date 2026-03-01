@@ -1,7 +1,7 @@
 import { html } from '../htm.js';
 import {
     useStore, setState,
-    startStream, stopStream, resetState, newSession,
+    startStream, stopStream, resetState, newSession, setRunMode,
 } from '../state.js';
 import { StatusBar } from './StatusBar.js';
 
@@ -38,6 +38,19 @@ export function InputPanel() {
                         ${store.models.map(m => html`
                             <option value=${m.id} title=${m.description || ''}>${m.name}</option>
                         `)}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="runMode">Run Mode</label>
+                    <select
+                        id="runMode"
+                        value=${store.runMode}
+                        onChange=${(e) => setRunMode(e.target.value)}
+                    >
+                        <option value="background">Background (reconnectable)</option>
+                        <option value="auto-kill">Auto-kill on disconnect</option>
+                        <option value="session-bound">Session-bound (stops on switch)</option>
                     </select>
                 </div>
 

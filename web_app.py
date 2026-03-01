@@ -18,6 +18,7 @@ from flask_cors import CORS
 from db import (
     init_db, create_session as db_create_session, append_event,
     complete_session, list_sessions, get_session, delete_session as db_delete_session,
+    get_events_after, get_session_status,
 )
 
 load_dotenv(override=True)
@@ -35,18 +36,21 @@ except Exception as e:
 SESSION_DIR = Path(tempfile.gettempdir()) / "open_deep_research_sessions"
 SESSION_DIR.mkdir(exist_ok=True)
 
+# Note: cleanup_stale_sessions() is called after function definitions below
+
 # In-memory session tracking for this worker
 active_sessions = {}  # session_id -> {'process': subprocess.Popen, 'queue': Queue}
 sessions_lock = threading.Lock()
 
 
-def write_session_file(session_id, agent_pid, worker_pid):
+def write_session_file(session_id, agent_pid, worker_pid, run_mode='background'):
     """Write session info to shared file"""
     session_file = SESSION_DIR / f"{session_id}.json"
     with open(session_file, 'w') as f:
         json.dump({
             'agent_pid': agent_pid,
             'worker_pid': worker_pid,
+            'run_mode': run_mode,
             'created_at': time.time()
         }, f)
 
@@ -113,6 +117,74 @@ def drain_stderr(process, queue, stderr_done_event):
         stderr_done_event.set()
 
 
+def background_worker(session_id, output_queue, process):
+    """Read subprocess output and persist to DB, independent of any HTTP connection.
+    Runs in a daemon thread. Cleans up session file when subprocess ends."""
+    event_counter = 0
+    session_final_answer = None
+
+    try:
+        while True:
+            item = output_queue.get()
+            if item is None:  # End of stream
+                break
+
+            try:
+                append_event(session_id, event_counter, item)
+                event_counter += 1
+            except Exception as db_err:
+                print(f"DB: Failed to append event: {db_err}")
+
+            if item.get('type') == 'final_answer' and not item.get('agent_name'):
+                session_final_answer = (item.get('output') or item.get('content', ''))[:5000]
+
+    except Exception as e:
+        print(f"Background worker error for {session_id}: {e}")
+    finally:
+        with sessions_lock:
+            if session_id in active_sessions:
+                del active_sessions[session_id]
+        delete_session_file(session_id)
+
+        try:
+            # Only mark completed if not already stopped/interrupted
+            status_info = get_session_status(session_id)
+            if status_info and status_info['status'] == 'running':
+                complete_session(session_id, final_answer=session_final_answer, status='completed')
+        except Exception:
+            pass
+
+
+def cleanup_stale_sessions():
+    """On startup, check session files for dead PIDs and mark them as interrupted."""
+    try:
+        for session_file in SESSION_DIR.glob("*.json"):
+            try:
+                with open(session_file, 'r') as f:
+                    data = json.load(f)
+                agent_pid = data.get('agent_pid')
+                try:
+                    os.kill(agent_pid, 0)  # Check if alive
+                except (ProcessLookupError, PermissionError, TypeError):
+                    session_id = session_file.stem
+                    try:
+                        complete_session(session_id, status='interrupted')
+                    except Exception:
+                        pass
+                    session_file.unlink()
+            except Exception:
+                session_file.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"Startup cleanup error: {e}")
+
+
+# Clean up any stale sessions from previous runs
+try:
+    cleanup_stale_sessions()
+except Exception as e:
+    print(f"Warning: Failed to clean up stale sessions: {e}")
+
+
 @app.route("/")
 def index():
     """Serve the main HTML page"""
@@ -123,11 +195,16 @@ def index():
 
 @app.route("/api/run/stream", methods=["POST"])
 def run_agent_stream():
-    """Streaming API endpoint using Server-Sent Events"""
+    """Streaming API endpoint using Server-Sent Events.
+    Supports run_mode: 'background' (default), 'auto-kill', 'session-bound'."""
     try:
         data = request.json
         question = data.get("question", "").strip()
         model_id = data.get("model_id", "o1")
+        run_mode = data.get("run_mode", "background")
+
+        if run_mode not in ('background', 'auto-kill', 'session-bound'):
+            run_mode = 'background'
 
         if not question:
             return jsonify({"error": "Question is required"}), 400
@@ -151,7 +228,7 @@ def run_agent_stream():
         worker_pid = os.getpid()
 
         # Write session to shared file (accessible by all workers)
-        write_session_file(session_id, agent_pid, worker_pid)
+        write_session_file(session_id, agent_pid, worker_pid, run_mode)
 
         # Store session in this worker's memory
         with sessions_lock:
@@ -179,88 +256,113 @@ def run_agent_stream():
         )
         stderr_thread.start()
 
-        # Stream responses
-        def generate():
-            event_counter = 0
-            session_final_answer = None
-            interrupted = False
+        # Persist session to database
+        try:
+            db_create_session(session_id, question, model_id, run_mode)
+        except Exception as db_err:
+            print(f"DB: Failed to create session: {db_err}")
 
-            # Persist session to database
-            try:
-                db_create_session(session_id, question, model_id)
-            except Exception as db_err:
-                print(f"DB: Failed to create session: {db_err}")
+        if run_mode in ('background', 'session-bound'):
+            # Background/session-bound: decouple subprocess from HTTP connection.
+            # Background worker persists events to DB independently.
+            # Client connects to /api/sessions/<id>/live for streaming.
+            bg_thread = threading.Thread(
+                target=background_worker,
+                args=(session_id, output_queue, process),
+                daemon=True
+            )
+            bg_thread.start()
 
-            try:
-                # Send session_id as first message
+            def generate_background():
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
 
-                while True:
-                    item = output_queue.get()
-                    if item is None:  # End of stream
-                        yield f"data: {json.dumps({'done': True})}\n\n"
-                        break
+            return Response(
+                stream_with_context(generate_background()),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                }
+            )
+        else:
+            # Auto-kill mode: original coupled behavior.
+            # generate() reads subprocess output, persists to DB, and streams SSE.
+            # Client disconnect kills the subprocess.
+            def generate():
+                event_counter = 0
+                session_final_answer = None
+                interrupted = False
 
-                    # Persist event to database
-                    try:
-                        append_event(session_id, event_counter, item)
-                        event_counter += 1
-                    except Exception as db_err:
-                        print(f"DB: Failed to append event: {db_err}")
-
-                    # Track final answer for session summary
-                    if item.get('type') == 'final_answer' and not item.get('agent_name'):
-                        session_final_answer = (item.get('output') or item.get('content', ''))[:5000]
-
-                    # Item is a structured JSON event from run.py callbacks
-                    yield f"data: {json.dumps(item)}\n\n"
-
-            except GeneratorExit:
-                interrupted = True
-                # Client disconnected (closed browser, navigated away, network error)
-                print(f"⚠️ Client disconnected for session {session_id}, cleaning up...")
-
-                # Kill the agent subprocess
-                with sessions_lock:
-                    if session_id in active_sessions:
-                        session = active_sessions[session_id]
-                        process = session.get('process')
-                        if process and process.poll() is None:
-                            try:
-                                process.kill()
-                                process.wait(timeout=1)
-                            except:
-                                pass
-
-                # Mark session as interrupted in DB
                 try:
-                    complete_session(session_id, final_answer=session_final_answer, status='interrupted')
-                except Exception:
-                    pass
-                raise  # Re-raise to properly close the generator
+                    # Send session_id as first message
+                    yield f"data: {json.dumps({'session_id': session_id})}\n\n"
 
-            finally:
-                # Always cleanup (whether completed or disconnected)
-                with sessions_lock:
-                    if session_id in active_sessions:
-                        del active_sessions[session_id]
-                delete_session_file(session_id)
+                    while True:
+                        item = output_queue.get()
+                        if item is None:  # End of stream
+                            yield f"data: {json.dumps({'done': True})}\n\n"
+                            break
 
-                # Mark session as completed in DB (skip if already marked as interrupted)
-                if not interrupted:
+                        # Persist event to database
+                        try:
+                            append_event(session_id, event_counter, item)
+                            event_counter += 1
+                        except Exception as db_err:
+                            print(f"DB: Failed to append event: {db_err}")
+
+                        # Track final answer for session summary
+                        if item.get('type') == 'final_answer' and not item.get('agent_name'):
+                            session_final_answer = (item.get('output') or item.get('content', ''))[:5000]
+
+                        # Item is a structured JSON event from run.py callbacks
+                        yield f"data: {json.dumps(item)}\n\n"
+
+                except GeneratorExit:
+                    interrupted = True
+                    # Client disconnected (closed browser, navigated away, network error)
+                    print(f"Client disconnected for session {session_id}, killing agent...")
+
+                    # Kill the agent subprocess
+                    with sessions_lock:
+                        if session_id in active_sessions:
+                            session = active_sessions[session_id]
+                            proc = session.get('process')
+                            if proc and proc.poll() is None:
+                                try:
+                                    proc.kill()
+                                    proc.wait(timeout=1)
+                                except:
+                                    pass
+
+                    # Mark session as interrupted in DB
                     try:
-                        complete_session(session_id, final_answer=session_final_answer, status='completed')
+                        complete_session(session_id, final_answer=session_final_answer, status='interrupted')
                     except Exception:
                         pass
+                    raise  # Re-raise to properly close the generator
 
-        return Response(
-            stream_with_context(generate()),
-            mimetype="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            }
-        )
+                finally:
+                    # Always cleanup (whether completed or disconnected)
+                    with sessions_lock:
+                        if session_id in active_sessions:
+                            del active_sessions[session_id]
+                    delete_session_file(session_id)
+
+                    # Mark session as completed in DB (skip if already marked as interrupted)
+                    if not interrupted:
+                        try:
+                            complete_session(session_id, final_answer=session_final_answer, status='completed')
+                        except Exception:
+                            pass
+
+            return Response(
+                stream_with_context(generate()),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                }
+            )
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -268,7 +370,7 @@ def run_agent_stream():
 
 @app.route("/api/stop/<session_id>", methods=["POST"])
 def stop_session(session_id):
-    """Stop a running agent session by killing both agent and worker processes"""
+    """Stop a running agent session. Mode-aware: auto-kill also kills the worker."""
     try:
         # Read session from shared file (works across workers)
         session_data = read_session_file(session_id)
@@ -278,6 +380,7 @@ def stop_session(session_id):
 
         agent_pid = session_data['agent_pid']
         worker_pid = session_data['worker_pid']
+        run_mode = session_data.get('run_mode', 'background')
 
         # Mark session as stopped in DB before killing processes
         try:
@@ -291,22 +394,25 @@ def stop_session(session_id):
         except ProcessLookupError:
             pass  # Already dead
 
-        # Kill the worker process (Gunicorn will restart it)
-        def kill_worker():
-            time.sleep(0.5)  # Give time to send response
-            try:
-                os.kill(worker_pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass  # Already dead
+        if run_mode == 'auto-kill':
+            # Auto-kill mode: also kill the worker to unstick the coupled generate()
+            def kill_worker():
+                time.sleep(0.5)  # Give time to send response
+                try:
+                    os.kill(worker_pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass  # Already dead
 
-        threading.Thread(target=kill_worker, daemon=True).start()
+            threading.Thread(target=kill_worker, daemon=True).start()
+        # Background/session-bound: no need to kill worker.
+        # The background_worker thread will notice the process died and clean up.
 
         # Cleanup session file
         delete_session_file(session_id)
 
         return jsonify({
             "success": True,
-            "message": "Agent and worker terminated (worker will restart automatically)"
+            "message": "Agent terminated"
         }), 200
 
     except Exception as e:
@@ -382,6 +488,59 @@ def api_get_session(session_id):
         return jsonify(session)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/<session_id>/live")
+def session_live_stream(session_id):
+    """SSE stream: replay existing events from DB, then poll for new ones.
+    Used for reconnecting to background sessions."""
+    after_order = request.args.get('after_order', -1, type=int)
+
+    def generate_live():
+        nonlocal after_order
+
+        # Send session_id first
+        yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+
+        # Check session exists
+        status_info = get_session_status(session_id)
+        if not status_info:
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Session not found'})}\n\n"
+            return
+
+        # Replay existing events from DB (after the given order)
+        existing_events = get_events_after(session_id, after_order)
+        for evt_row in existing_events:
+            yield f"data: {json.dumps(evt_row['event_data'])}\n\n"
+            after_order = evt_row['event_order']
+
+        # If session already finished, send done and return
+        if status_info['status'] != 'running':
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
+
+        # Poll for new events until session ends
+        while True:
+            time.sleep(0.5)
+
+            new_events = get_events_after(session_id, after_order)
+            for evt_row in new_events:
+                yield f"data: {json.dumps(evt_row['event_data'])}\n\n"
+                after_order = evt_row['event_order']
+
+            status_info = get_session_status(session_id)
+            if not status_info or status_info['status'] != 'running':
+                yield f"data: {json.dumps({'done': True})}\n\n"
+                break
+
+    return Response(
+        stream_with_context(generate_live()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @app.route("/api/sessions/<session_id>", methods=["DELETE"])

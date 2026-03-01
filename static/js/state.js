@@ -23,6 +23,7 @@ const state = {
     question: '',
     finalAnswer: null,
     totalStartTime: null,
+    runMode: localStorage.getItem('odr-run-mode') || 'background',
 
     // Sidebar session management
     sessions: [],
@@ -257,48 +258,24 @@ export async function loadModels() {
     }
 }
 
-export async function startStream() {
-    const q = state.question.trim();
-    if (!q) {
-        setState({ status: { message: 'Please enter a question', type: 'error' } });
-        return;
-    }
+export function setRunMode(mode) {
+    if (!['background', 'auto-kill', 'session-bound'].includes(mode)) return;
+    setState({ runMode: mode });
+    localStorage.setItem('odr-run-mode', mode);
+}
 
-    const model = state.selectedModel;
-    resetState();
-    setState({
-        question: q,
-        selectedModel: model,
-        isRunning: true,
-        totalStartTime: Date.now(),
-        status: { message: 'Running agent...', type: 'loading' },
-        viewingHistory: false,
-        activeSessionId: null,
-    });
-
+/**
+ * Read an SSE stream from a fetch Response, processing events into the store.
+ * Shared by both auto-kill (direct stream) and background/reconnect (live endpoint).
+ */
+async function readSSEStream(response) {
+    const reader = response.body.getReader();
+    currentReader = reader;
+    const decoder = new TextDecoder();
+    let buffer = '';
     let hasError = false;
 
     try {
-        const response = await fetch('/api/run/stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: q, model_id: model }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-            setState({
-                status: { message: `Error: ${error.error || 'Unknown error'}`, type: 'error' },
-                isRunning: false,
-            });
-            return;
-        }
-
-        const reader = response.body.getReader();
-        currentReader = reader;
-        const decoder = new TextDecoder();
-        let buffer = '';
-
         while (true) {
             if (state.isStopped) break;
 
@@ -328,7 +305,13 @@ export async function startStream() {
                             setState({ sessionId: jsonData.session_id, activeSessionId: jsonData.session_id });
                             loadSessions();
                         } else if (jsonData.done) {
-                            break;
+                            setState({
+                                status: {
+                                    message: hasError ? 'Completed with errors' : 'Completed successfully',
+                                    type: hasError ? 'error' : 'success',
+                                },
+                            });
+                            return; // Stream complete
                         } else {
                             addEvent(jsonData);
                             if (jsonData.type === 'error') {
@@ -346,13 +329,108 @@ export async function startStream() {
 
             buffer = lines[lines.length - 1];
         }
+    } finally {
+        currentReader = null;
+    }
+}
+
+/**
+ * Extract session_id from the initial SSE response (background mode).
+ */
+async function extractSessionId(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        for (let i = 0; i < lines.length - 1; i++) {
+            if (lines[i].startsWith('data: ')) {
+                try {
+                    const data = JSON.parse(lines[i].slice(6));
+                    if (data.session_id) return data.session_id;
+                } catch (e) { /* ignore */ }
+            }
+        }
+        buffer = lines[lines.length - 1];
+    }
+    return null;
+}
+
+/**
+ * Connect to the /live SSE endpoint for a running session.
+ * afterOrder: skip events already loaded (for reconnect with existing events).
+ */
+async function connectToLiveStream(sessionId, afterOrder = -1) {
+    const url = afterOrder >= 0
+        ? `/api/sessions/${sessionId}/live?after_order=${afterOrder}`
+        : `/api/sessions/${sessionId}/live`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to connect to live stream');
+    await readSSEStream(response);
+}
+
+export async function startStream() {
+    const q = state.question.trim();
+    if (!q) {
+        setState({ status: { message: 'Please enter a question', type: 'error' } });
+        return;
+    }
+
+    const model = state.selectedModel;
+    const mode = state.runMode;
+    resetState();
+    setState({
+        question: q,
+        selectedModel: model,
+        runMode: mode,
+        isRunning: true,
+        totalStartTime: Date.now(),
+        status: { message: 'Running agent...', type: 'loading' },
+        viewingHistory: false,
+        activeSessionId: null,
+    });
+
+    try {
+        const response = await fetch('/api/run/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: q, model_id: model, run_mode: mode }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            setState({
+                status: { message: `Error: ${error.error || 'Unknown error'}`, type: 'error' },
+                isRunning: false,
+            });
+            return;
+        }
+
+        if (mode === 'auto-kill') {
+            // Auto-kill: read full SSE stream directly from the POST response
+            await readSSEStream(response);
+        } else {
+            // Background / session-bound: extract session_id, then connect to /live
+            const sessionId = await extractSessionId(response);
+            if (sessionId) {
+                setState({ sessionId, activeSessionId: sessionId });
+                loadSessions();
+                await connectToLiveStream(sessionId);
+            }
+        }
     } catch (error) {
-        setState({ status: { message: `Connection Error: ${error.message}`, type: 'error' } });
+        if (!state.isStopped) {
+            setState({ status: { message: `Connection Error: ${error.message}`, type: 'error' } });
+        }
     } finally {
         setState({ isRunning: false });
         currentReader = null;
 
-        // Refresh sidebar session list (backend persists sessions now)
+        // Refresh sidebar session list
         loadSessions();
 
         // Highlight the just-completed session in sidebar
@@ -362,22 +440,37 @@ export async function startStream() {
     }
 }
 
-export async function stopStream() {
-    if (currentReader && state.sessionId) {
-        setState({ isStopped: true });
+/**
+ * Disconnect from a live stream without killing the agent.
+ * Used in background mode when the user navigates away.
+ */
+function disconnectLiveStream() {
+    if (currentReader) {
+        setState({ isStopped: true }); // break the readSSEStream loop
+        try { currentReader.cancel(); } catch (e) { /* ignore */ }
+        currentReader = null;
+    }
+    setState({ isRunning: false });
+}
 
+export async function stopStream() {
+    setState({ isStopped: true });
+
+    if (state.sessionId) {
         try {
             await fetch(`/api/stop/${state.sessionId}`, { method: 'POST' });
         } catch (error) {
             console.error('Error stopping session:', error);
         }
-
-        currentReader.cancel();
-        currentReader = null;
-
-        addEvent({ type: 'error', content: 'Agent execution cancelled by user' });
-        setState({ status: { message: 'Stopped by user', type: 'error' }, isRunning: false });
     }
+
+    if (currentReader) {
+        try { currentReader.cancel(); } catch (e) { /* ignore */ }
+        currentReader = null;
+    }
+
+    addEvent({ type: 'error', content: 'Agent execution cancelled by user' });
+    setState({ status: { message: 'Stopped by user', type: 'error' }, isRunning: false });
 }
 
 export function toggleTheme() {
@@ -411,7 +504,19 @@ export async function loadSessions() {
 
 export async function loadSession(sessionId) {
     if (state.activeSessionId === sessionId && state.viewingHistory) return;
-    if (state.isRunning) return;
+
+    if (state.isRunning) {
+        if (state.runMode === 'session-bound') {
+            // Session-bound: stop the agent before switching
+            await stopStream();
+        } else if (state.runMode === 'background') {
+            // Background: just disconnect the viewer, agent keeps running
+            disconnectLiveStream();
+        } else {
+            // Auto-kill: block switching (agent is coupled to this connection)
+            return;
+        }
+    }
 
     setState({ status: { message: 'Loading session...', type: 'loading' } });
 
@@ -423,6 +528,39 @@ export async function loadSession(sessionId) {
         cachedEvents = null;
         cachedTree = [];
 
+        // If session is still running, reconnect to live stream
+        if (session.status === 'running') {
+            const eventCount = (session.events || []).length;
+            setState({
+                events: session.events || [],
+                question: session.question,
+                selectedModel: session.model_id,
+                sessionId: sessionId,
+                activeSessionId: sessionId,
+                viewingHistory: false,
+                isRunning: true,
+                isStopped: false,
+                finalAnswer: null,
+                runMode: session.run_mode || 'background',
+                totalStartTime: Date.now(),
+                status: { message: 'Reconnected to running agent...', type: 'loading' },
+            });
+
+            // Connect to live stream, skipping events we already loaded
+            try {
+                await connectToLiveStream(sessionId, eventCount - 1);
+            } catch (e) {
+                console.error('Failed to reconnect:', e);
+                setState({ status: { message: `Reconnect failed: ${e.message}`, type: 'error' } });
+            } finally {
+                setState({ isRunning: false });
+                currentReader = null;
+                loadSessions();
+            }
+            return;
+        }
+
+        // Not running — show history (current behavior)
         setState({
             events: session.events || [],
             question: session.question,
@@ -464,8 +602,17 @@ export async function deleteSession(sessionId) {
     }
 }
 
-export function newSession() {
-    if (state.isRunning) return;
+export async function newSession() {
+    if (state.isRunning) {
+        if (state.runMode === 'session-bound') {
+            await stopStream();
+        } else if (state.runMode === 'background') {
+            disconnectLiveStream();
+        } else {
+            // Auto-kill: block
+            return;
+        }
+    }
     resetState();
     setState({ question: '', activeSessionId: null, viewingHistory: false });
 }

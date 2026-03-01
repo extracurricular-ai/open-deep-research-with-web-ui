@@ -496,6 +496,24 @@ select {
     padding-left: 22px;
 }
 
+.sidebar-live-badge {
+    font-size: var(--fs-xs);
+    color: var(--warning);
+    background: rgba(255, 170, 0, 0.1);
+    border: 1px solid rgba(255, 170, 0, 0.2);
+    padding: 0 4px;
+    border-radius: var(--rad);
+    margin-left: var(--sp-1);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    animation: pulse-live 2s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .sidebar-item-preview {
     font-size: var(--fs-xs);
     color: var(--text-2);

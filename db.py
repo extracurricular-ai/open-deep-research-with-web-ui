@@ -47,7 +47,8 @@ def init_db():
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 completed_at TEXT,
                 status TEXT NOT NULL DEFAULT 'running',
-                final_answer TEXT
+                final_answer TEXT,
+                run_mode TEXT NOT NULL DEFAULT 'background'
             );
 
             CREATE TABLE IF NOT EXISTS events (
@@ -66,13 +67,20 @@ def init_db():
         """)
         conn.commit()
 
+        # Migration: add run_mode column for existing databases
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'background'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
-def create_session(session_id, question, model_id):
+
+def create_session(session_id, question, model_id, run_mode='background'):
     """Insert a new session row when streaming starts."""
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO sessions (id, question, model_id, status) VALUES (?, ?, ?, 'running')",
-            (session_id, question, model_id),
+            "INSERT INTO sessions (id, question, model_id, status, run_mode) VALUES (?, ?, ?, 'running', ?)",
+            (session_id, question, model_id, run_mode),
         )
         conn.commit()
 
@@ -101,7 +109,7 @@ def list_sessions(limit=50, offset=0):
     """Return session summaries for the sidebar, newest first."""
     with get_connection() as conn:
         rows = conn.execute(
-            """SELECT id, question, model_id, created_at, completed_at, status,
+            """SELECT id, question, model_id, created_at, completed_at, status, run_mode,
                       SUBSTR(final_answer, 1, 200) as final_answer_preview
                FROM sessions
                ORDER BY created_at DESC
@@ -136,3 +144,22 @@ def delete_session(session_id):
         cursor = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+
+def get_events_after(session_id, after_order):
+    """Return events with event_order > after_order for incremental polling."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT event_order, event_data FROM events WHERE session_id = ? AND event_order > ? ORDER BY event_order",
+            (session_id, after_order),
+        ).fetchall()
+        return [{"event_order": row["event_order"], "event_data": json.loads(row["event_data"])} for row in rows]
+
+
+def get_session_status(session_id):
+    """Return just session status and run_mode (lightweight, for polling)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT status, run_mode FROM sessions WHERE id = ?", (session_id,),
+        ).fetchone()
+        return dict(row) if row else None
