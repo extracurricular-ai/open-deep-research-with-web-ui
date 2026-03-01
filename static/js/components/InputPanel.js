@@ -1,7 +1,7 @@
 import { html } from '../htm.js';
 import {
     useStore, setState,
-    startStream, stopStream, resetState, newSession, setRunMode,
+    startStream, stopStream, newSession, setRunMode, resetView,
 } from '../state.js';
 import { StatusBar } from './StatusBar.js';
 
@@ -14,9 +14,12 @@ export function InputPanel() {
     }
 
     function onClear() {
-        resetState();
+        resetView();
         setState({ question: '' });
     }
+
+    // isRunning only locks UI in live mode. In background/auto-kill, user can always start new.
+    const uiLocked = store.isRunning && store.runMode === 'live';
 
     return html`
         <div class="panel input-panel">
@@ -48,9 +51,9 @@ export function InputPanel() {
                         value=${store.runMode}
                         onChange=${(e) => setRunMode(e.target.value)}
                     >
-                        <option value="background">Background (reconnectable)</option>
-                        <option value="auto-kill">Auto-kill on disconnect</option>
-                        <option value="session-bound">Session-bound (stops on switch)</option>
+                        <option value="background">Background (persistent)</option>
+                        <option value="auto-kill">Background (auto-kill)</option>
+                        <option value="live">Live (leave = stop)</option>
                     </select>
                 </div>
 
@@ -69,11 +72,11 @@ export function InputPanel() {
                     <button
                         type="submit"
                         class="btn btn-submit"
-                        disabled=${store.isRunning}
+                        disabled=${uiLocked}
                     >
                         Run Agent <kbd>Ctrl+Enter</kbd>
                     </button>
-                    ${store.isRunning && html`
+                    ${(store.isRunning || store.viewingLiveSession) && html`
                         <button
                             type="button"
                             class="btn btn-stop"

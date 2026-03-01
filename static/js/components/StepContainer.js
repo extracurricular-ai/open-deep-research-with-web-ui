@@ -1,4 +1,5 @@
 import { html } from '../htm.js';
+import { useStore } from '../state.js';
 import { formatElapsedTime, renderMarkdown } from '../utils.js';
 import { Collapsible } from './Collapsible.js';
 import { ToolCall } from './ToolCall.js';
@@ -18,14 +19,20 @@ function extractPreview(text, maxLen) {
 }
 
 export function StepContainer({ node }) {
+    const isLive = useStore(s => s.isRunning || s.viewingLiveSession);
     const data = node.data;
     if (!data) {
         // Pending placeholder (no action_step merged yet)
+        // If session is no longer live, show as interrupted instead of spinning
+        const interrupted = !isLive;
         return html`
-            <div class="step-container pending">
-                <div class="step-number active">...</div>
+            <div class="step-container ${interrupted ? '' : 'pending'}">
+                <div class="step-number ${interrupted ? '' : 'active'}">${interrupted ? '\u2717' : '...'}</div>
                 <div class="step-header">
-                    <span class="spinner" /> ${node.label || 'Processing'}...
+                    ${interrupted
+                        ? html`<span>${node.label || 'Processing'} — <em>interrupted</em></span>`
+                        : html`<span class="spinner" /> ${node.label || 'Processing'}...`
+                    }
                 </div>
                 <div class="step-children">
                     ${Object.entries(node.subAgents || {}).map(([name, agent]) => html`

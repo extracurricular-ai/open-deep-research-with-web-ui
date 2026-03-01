@@ -438,6 +438,11 @@ select {
     border-left: 2px solid var(--accent);
 }
 
+.sidebar-item-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .sidebar-item-header {
     display: flex;
     align-items: center;

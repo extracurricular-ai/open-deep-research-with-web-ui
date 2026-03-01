@@ -7,8 +7,8 @@ import { useEffect } from 'preact/hooks';
 import { html } from './htm.js';
 import {
     getState, setState, useStore,
-    loadModels, loadSessions,
-    startStream, stopStream, resetState, toggleSidebar,
+    loadModels, loadSessions, handlePageVisible, handlePageUnload,
+    startStream, stopStream, resetView, toggleSidebar,
 } from './state.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
@@ -27,6 +27,21 @@ function App() {
     useEffect(() => {
         loadModels();
         loadSessions();
+    }, []);
+
+    // Refresh state when tab becomes visible (bfcache restore, tab switch back)
+    useEffect(() => {
+        function onVisible() {
+            if (document.visibilityState === 'visible') handlePageVisible();
+        }
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, []);
+
+    // Kill auto-kill + live sessions on page unload (tab close, navigation away)
+    useEffect(() => {
+        window.addEventListener('beforeunload', handlePageUnload);
+        return () => window.removeEventListener('beforeunload', handlePageUnload);
     }, []);
 
     // Global keyboard shortcuts
@@ -49,7 +64,7 @@ function App() {
             }
             if (isMod && e.key === 'l') {
                 e.preventDefault();
-                resetState();
+                resetView();
                 setState({ question: '' });
             }
             if (isMod && e.key === 'b') {

@@ -9,7 +9,7 @@ import json
 import tempfile
 import time
 from pathlib import Path
-from queue import Queue
+from queue import Queue, Empty
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, stream_with_context, Response
@@ -203,7 +203,7 @@ def run_agent_stream():
         model_id = data.get("model_id", "o1")
         run_mode = data.get("run_mode", "background")
 
-        if run_mode not in ('background', 'auto-kill', 'session-bound'):
+        if run_mode not in ('background', 'auto-kill', 'live'):
             run_mode = 'background'
 
         if not question:
@@ -262,8 +262,8 @@ def run_agent_stream():
         except Exception as db_err:
             print(f"DB: Failed to create session: {db_err}")
 
-        if run_mode in ('background', 'session-bound'):
-            # Background/session-bound: decouple subprocess from HTTP connection.
+        if run_mode == 'background':
+            # Background persistent: decouple subprocess from HTTP connection.
             # Background worker persists events to DB independently.
             # Client connects to /api/sessions/<id>/live for streaming.
             bg_thread = threading.Thread(
@@ -285,9 +285,9 @@ def run_agent_stream():
                 }
             )
         else:
-            # Auto-kill mode: original coupled behavior.
+            # Auto-kill / Live mode: coupled behavior.
             # generate() reads subprocess output, persists to DB, and streams SSE.
-            # Client disconnect kills the subprocess.
+            # Client disconnect (GeneratorExit) kills the subprocess.
             def generate():
                 event_counter = 0
                 session_final_answer = None
@@ -298,7 +298,16 @@ def run_agent_stream():
                     yield f"data: {json.dumps({'session_id': session_id})}\n\n"
 
                     while True:
-                        item = output_queue.get()
+                        # Use timeout so we periodically yield, allowing
+                        # GeneratorExit to be raised on client disconnect
+                        try:
+                            item = output_queue.get(timeout=2)
+                        except Empty:
+                            # No data yet — yield SSE comment as heartbeat
+                            # This triggers GeneratorExit if client disconnected
+                            yield ": heartbeat\n\n"
+                            continue
+
                         if item is None:  # End of stream
                             yield f"data: {json.dumps({'done': True})}\n\n"
                             break
@@ -394,18 +403,16 @@ def stop_session(session_id):
         except ProcessLookupError:
             pass  # Already dead
 
-        if run_mode == 'auto-kill':
-            # Auto-kill mode: also kill the worker to unstick the coupled generate()
-            def kill_worker():
-                time.sleep(0.5)  # Give time to send response
-                try:
-                    os.kill(worker_pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass  # Already dead
-
-            threading.Thread(target=kill_worker, daemon=True).start()
-        # Background/session-bound: no need to kill worker.
-        # The background_worker thread will notice the process died and clean up.
+        # For coupled modes (auto-kill, live), unblock generate() by injecting
+        # None into the output queue (if this is our worker)
+        if run_mode in ('auto-kill', 'live'):
+            with sessions_lock:
+                if session_id in active_sessions:
+                    try:
+                        active_sessions[session_id]['queue'].put(None)
+                    except Exception:
+                        pass
+        # Background: background_worker thread will notice the process died and clean up.
 
         # Cleanup session file
         delete_session_file(session_id)
