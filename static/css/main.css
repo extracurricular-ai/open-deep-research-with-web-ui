@@ -205,6 +205,10 @@ header {
     overflow: hidden;        /* clip anything that escapes */
 }
 
+.input-panel {
+    overflow: visible;       /* allow split-button dropdown to escape */
+}
+
 .panel h2 {
     font-size: var(--fs-sm);
     font-weight: 500;
@@ -313,6 +317,88 @@ select {
     background: rgba(0, 255, 136, 0.15);
     border-color: rgba(0, 255, 136, 0.3);
     color: var(--accent);
+}
+
+/* ===== Split Button (Run + Mode Selector) ===== */
+.split-btn {
+    display: inline-flex;
+    position: relative;
+}
+
+.split-btn-main {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+}
+
+.split-btn-chevron {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    padding: var(--sp-2) var(--sp-2);
+    min-width: unset;
+}
+
+.split-btn-mode {
+    font-size: var(--fs-xs);
+    opacity: 0.7;
+    background: rgba(0, 255, 136, 0.1);
+    padding: 1px 5px;
+    border-radius: 2px;
+    margin: 0 2px;
+}
+
+.split-btn-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    min-width: 240px;
+    margin-top: var(--sp-1);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--rad);
+    z-index: 100;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.split-btn-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    border: none;
+    background: transparent;
+    color: var(--text-1);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    text-align: left;
+}
+
+.split-btn-option:hover {
+    background: var(--surface-hover);
+}
+
+.split-btn-option-active {
+    background: var(--accent-glow);
+    color: var(--accent);
+}
+
+.split-btn-option-label {
+    font-weight: 500;
+}
+
+.split-btn-option-desc {
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+    margin-top: 2px;
+}
+
+.split-btn-option-active .split-btn-option-desc {
+    color: var(--accent);
+    opacity: 0.7;
 }
 
 .btn-stop {
