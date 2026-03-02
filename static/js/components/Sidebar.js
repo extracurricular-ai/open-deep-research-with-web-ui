@@ -1,5 +1,5 @@
 import { html } from '../htm.js';
-import { useStore, loadSession, deleteSession, newSession, toggleSidebar } from '../state.js';
+import { useStore, loadSession, deleteSession, newSession, toggleSidebar, isSessionLive } from '../state.js';
 
 function formatDate(isoString) {
     if (!isoString) return '';
@@ -34,11 +34,15 @@ export function Sidebar() {
     const isRunning = useStore(s => s.isRunning);
     const sessionsLoading = useStore(s => s.sessionsLoading);
     const sidebarOpen = useStore(s => s.sidebarOpen);
+    const runMode = useStore(s => s.runMode);
 
     function onDelete(e, sessionId) {
         e.stopPropagation();
         deleteSession(sessionId);
     }
+
+    // Only lock "New Session" in live mode when running
+    const newSessionDisabled = isRunning && runMode === 'live';
 
     return html`
         <aside class="sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}">
@@ -54,7 +58,7 @@ export function Sidebar() {
             <button
                 class="btn btn-submit sidebar-new-btn"
                 onClick=${newSession}
-                disabled=${isRunning}
+                disabled=${newSessionDisabled}
             >
                 + New Session
             </button>
@@ -68,8 +72,8 @@ export function Sidebar() {
                 `}
                 ${sessions.map(s => html`
                     <div
-                        class="sidebar-item ${s.id === activeSessionId ? 'sidebar-item-active' : ''}"
-                        onClick=${() => loadSession(s.id)}
+                        class="sidebar-item ${s.id === activeSessionId ? 'sidebar-item-active' : ''} ${newSessionDisabled ? 'sidebar-item-disabled' : ''}"
+                        onClick=${() => !newSessionDisabled && loadSession(s.id)}
                         key=${s.id}
                     >
                         <div class="sidebar-item-header">
@@ -85,6 +89,9 @@ export function Sidebar() {
                         </div>
                         <div class="sidebar-item-meta">
                             ${formatDate(s.created_at)} \u2022 ${s.model_id}
+                            ${(s.status === 'running' || isSessionLive(s.id)) && html`
+                                <span class="sidebar-live-badge">LIVE</span>
+                            `}
                         </div>
                         ${s.final_answer_preview && html`
                             <div class="sidebar-item-preview">
