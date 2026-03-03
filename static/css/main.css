@@ -1501,6 +1501,96 @@ footer p {
     font-size: var(--fs-base);
 }
 
+.settings-number-input {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-0);
+    padding: 6px 10px;
+    border-radius: var(--rad);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    width: 120px;
+    transition: border-color var(--duration) var(--ease);
+}
+
+.settings-number-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.settings-models-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin-bottom: var(--sp-2);
+}
+
+.settings-model-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 4px 8px;
+    background: var(--surface-2);
+    border-radius: var(--rad);
+    font-size: var(--fs-xs);
+}
+
+.settings-model-id {
+    color: var(--accent);
+    font-weight: 500;
+    min-width: 160px;
+}
+
+.settings-model-name {
+    color: var(--text-1);
+    flex: 1;
+}
+
+.settings-add-model {
+    display: flex;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+}
+
+.settings-add-model input {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-0);
+    padding: 4px 8px;
+    border-radius: var(--rad);
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    flex: 1;
+    min-width: 100px;
+}
+
+.settings-add-model input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.settings-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+    margin-top: var(--sp-3);
+}
+
+.settings-message {
+    font-size: var(--fs-xs);
+}
+
+.settings-message-success {
+    color: var(--accent);
+}
+
+.settings-message-error {
+    color: var(--error);
+}
+
 /* ===== Light Theme Override ===== */
 [data-theme="light"] {
     --surface-0: #fafafa;

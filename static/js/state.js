@@ -918,6 +918,27 @@ export async function loadConfigMeta() {
     }
 }
 
+export async function loadServerConfig() {
+    const response = await fetch('/api/config');
+    if (!response.ok) throw new Error('Failed to load config');
+    return response.json();
+}
+
+export async function saveServerConfig(config, password) {
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...config, _password: password }),
+        });
+        const data = await response.json();
+        if (!response.ok) return { success: false, error: data.error };
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+}
+
 /** Read client API keys from localStorage */
 export function getClientApiKeys() {
     const keys = {};

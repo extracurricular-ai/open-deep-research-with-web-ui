@@ -2,6 +2,7 @@ import { html } from '../htm.js';
 import { useState, useEffect } from 'preact/hooks';
 import {
     useStore, setState, toggleSettings, toggleTheme, setRunMode,
+    loadServerConfig, saveServerConfig,
 } from '../state.js';
 
 const API_KEY_FIELDS = [
@@ -16,6 +17,13 @@ const RUN_MODE_OPTIONS = [
     { value: 'background', label: 'Background (persistent)' },
     { value: 'auto-kill', label: 'Background (auto-kill)' },
     { value: 'live', label: 'Live (leave = stop)' },
+];
+
+const SEARCH_ENGINE_OPTIONS = [
+    { value: 'DDGS', label: 'DuckDuckGo' },
+    { value: 'META_SOTA', label: 'MetaSo' },
+    { value: 'META_SOTA,DDGS', label: 'MetaSo with DuckDuckGo fallback' },
+    { value: 'DDGS,META_SOTA', label: 'DuckDuckGo with MetaSo fallback' },
 ];
 
 function getClientApiKeys() {
@@ -48,6 +56,23 @@ function ApiKeyInput({ field, value, onChange }) {
                     aria-label=${visible ? 'Hide' : 'Show'}
                 >${visible ? '\u25C9' : '\u25CE'}</button>
             </div>
+        </div>
+    `;
+}
+
+function NumberInput({ label, value, onChange, min, max, step }) {
+    return html`
+        <div class="settings-field">
+            <label>${label}</label>
+            <input
+                type="number"
+                class="settings-number-input"
+                value=${value}
+                min=${min}
+                max=${max}
+                step=${step || 1}
+                onInput=${(e) => onChange(parseInt(e.target.value, 10) || 0)}
+            />
         </div>
     `;
 }
@@ -117,6 +142,246 @@ function ClientSettings() {
     `;
 }
 
+function ServerSettings() {
+    const [password, setPassword] = useState('');
+    const [config, setConfig] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState(null);
+    const [newModel, setNewModel] = useState({ id: '', name: '', description: '' });
+
+    useEffect(() => {
+        loadServerConfig().then(cfg => {
+            setConfig(cfg);
+            setLoading(false);
+        }).catch(() => setLoading(false));
+    }, []);
+
+    if (loading) return html`<p class="settings-hint">Loading server config...</p>`;
+    if (!config) return html`<p class="settings-hint">Failed to load server config.</p>`;
+
+    function update(section, key, value) {
+        setConfig({
+            ...config,
+            [section]: { ...config[section], [key]: value },
+        });
+    }
+
+    function updateApiKey(key, value) {
+        setConfig({
+            ...config,
+            api_keys: { ...config.api_keys, [key]: value },
+        });
+    }
+
+    function addModel() {
+        if (!newModel.id || !newModel.name) return;
+        setConfig({
+            ...config,
+            models: [...config.models, { ...newModel }],
+        });
+        setNewModel({ id: '', name: '', description: '' });
+    }
+
+    function removeModel(index) {
+        setConfig({
+            ...config,
+            models: config.models.filter((_, i) => i !== index),
+        });
+    }
+
+    async function onSave() {
+        if (!password) {
+            setMessage({ type: 'error', text: 'Admin password required' });
+            return;
+        }
+        setSaving(true);
+        setMessage(null);
+        const result = await saveServerConfig(config, password);
+        setSaving(false);
+        if (result.success) {
+            setMessage({ type: 'success', text: 'Config saved' });
+        } else {
+            setMessage({ type: 'error', text: result.error || 'Save failed' });
+        }
+    }
+
+    return html`
+        <div class="settings-section">
+            <div class="settings-field">
+                <label>Admin Password</label>
+                <input
+                    type="password"
+                    class="settings-number-input"
+                    value=${password}
+                    placeholder="Enter admin password..."
+                    onInput=${(e) => setPassword(e.target.value)}
+                    autocomplete="off"
+                    style="width: 100%"
+                />
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3>Agent</h3>
+            <${NumberInput} label="Search Agent Max Steps"
+                value=${config.agent.search_agent_max_steps}
+                onChange=${(v) => update('agent', 'search_agent_max_steps', v)}
+                min=${1} max=${100} />
+            <${NumberInput} label="Manager Agent Max Steps"
+                value=${config.agent.manager_agent_max_steps}
+                onChange=${(v) => update('agent', 'manager_agent_max_steps', v)}
+                min=${1} max=${100} />
+            <${NumberInput} label="Planning Interval"
+                value=${config.agent.planning_interval}
+                onChange=${(v) => update('agent', 'planning_interval', v)}
+                min=${1} max=${50} />
+            <${NumberInput} label="Verbosity Level"
+                value=${config.agent.verbosity_level}
+                onChange=${(v) => update('agent', 'verbosity_level', v)}
+                min=${0} max=${5} />
+        </div>
+
+        <div class="settings-section">
+            <h3>Model</h3>
+            <div class="settings-field">
+                <label>Default Model ID</label>
+                <input
+                    type="text"
+                    class="settings-number-input"
+                    value=${config.model.default_model_id}
+                    onInput=${(e) => update('model', 'default_model_id', e.target.value)}
+                    style="width: 100%"
+                />
+            </div>
+            <${NumberInput} label="Max Completion Tokens"
+                value=${config.model.max_completion_tokens}
+                onChange=${(v) => update('model', 'max_completion_tokens', v)}
+                min=${256} max=${65536} />
+            <div class="settings-field">
+                <label>Reasoning Effort (o1 only)</label>
+                <select
+                    value=${config.model.reasoning_effort}
+                    onChange=${(e) => update('model', 'reasoning_effort', e.target.value)}
+                >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3>Search</h3>
+            <div class="settings-field">
+                <label>Search Engine</label>
+                <select
+                    value=${config.search.engine}
+                    onChange=${(e) => update('search', 'engine', e.target.value)}
+                >
+                    ${SEARCH_ENGINE_OPTIONS.map(opt => html`
+                        <option value=${opt.value}>${opt.label}</option>
+                    `)}
+                </select>
+            </div>
+            <${NumberInput} label="Max Results"
+                value=${config.search.max_results}
+                onChange=${(v) => update('search', 'max_results', v)}
+                min=${1} max=${50} />
+        </div>
+
+        <div class="settings-section">
+            <h3>Browser</h3>
+            <${NumberInput} label="Viewport Size (chars)"
+                value=${config.browser.viewport_size}
+                onChange=${(v) => update('browser', 'viewport_size', v)}
+                min=${1024} max=${20480} />
+            <${NumberInput} label="Request Timeout (seconds)"
+                value=${config.browser.request_timeout}
+                onChange=${(v) => update('browser', 'request_timeout', v)}
+                min=${10} max=${600} />
+        </div>
+
+        <div class="settings-section">
+            <h3>Limits</h3>
+            <${NumberInput} label="Text Limit (chars)"
+                value=${config.limits.text_limit}
+                onChange=${(v) => update('limits', 'text_limit', v)}
+                min=${1000} max=${500000} />
+            <${NumberInput} label="Max Field Length (chars)"
+                value=${config.limits.max_field_length}
+                onChange=${(v) => update('limits', 'max_field_length', v)}
+                min=${1000} max=${200000} />
+        </div>
+
+        <div class="settings-section">
+            <h3>Server API Keys</h3>
+            <p class="settings-hint">Shared keys for all users. Masked values shown — enter new value to replace.</p>
+            ${API_KEY_FIELDS.map(f => html`
+                <${ApiKeyInput}
+                    key=${'srv-' + f.key}
+                    field=${f}
+                    value=${config.api_keys[f.key] || ''}
+                    onChange=${(k, v) => updateApiKey(k, v)}
+                />
+            `)}
+        </div>
+
+        <div class="settings-section">
+            <h3>Available Models</h3>
+            <div class="settings-models-list">
+                ${config.models.map((m, i) => html`
+                    <div class="settings-model-item" key=${m.id}>
+                        <span class="settings-model-id">${m.id}</span>
+                        <span class="settings-model-name">${m.name}</span>
+                        <button
+                            class="btn btn-ghost btn-sm"
+                            onClick=${() => removeModel(i)}
+                            title="Remove model"
+                        >\u2715</button>
+                    </div>
+                `)}
+            </div>
+            <div class="settings-add-model">
+                <input
+                    type="text"
+                    placeholder="Model ID"
+                    value=${newModel.id}
+                    onInput=${(e) => setNewModel({ ...newModel, id: e.target.value })}
+                />
+                <input
+                    type="text"
+                    placeholder="Display Name"
+                    value=${newModel.name}
+                    onInput=${(e) => setNewModel({ ...newModel, name: e.target.value })}
+                />
+                <input
+                    type="text"
+                    placeholder="Description"
+                    value=${newModel.description}
+                    onInput=${(e) => setNewModel({ ...newModel, description: e.target.value })}
+                />
+                <button class="btn btn-ghost btn-sm" onClick=${addModel}>+ Add</button>
+            </div>
+        </div>
+
+        <div class="settings-actions">
+            ${message && html`
+                <span class="settings-message settings-message-${message.type}">
+                    ${message.text}
+                </span>
+            `}
+            <button
+                class="btn btn-submit"
+                onClick=${onSave}
+                disabled=${saving}
+            >
+                ${saving ? 'Saving...' : 'Save Server Config'}
+            </button>
+        </div>
+    `;
+}
+
 export function SettingsModal() {
     const settingsOpen = useStore(s => s.settingsOpen);
     const enableConfigUI = useStore(s => s.enableConfigUI);
@@ -155,11 +420,7 @@ export function SettingsModal() {
 
                 <div class="settings-modal-body">
                     ${activeTab === 'client' && html`<${ClientSettings} />`}
-                    ${activeTab === 'server' && enableConfigUI && html`
-                        <div class="settings-section">
-                            <p class="settings-hint">Server configuration — coming in next update.</p>
-                        </div>
-                    `}
+                    ${activeTab === 'server' && enableConfigUI && html`<${ServerSettings} />`}
                 </div>
             </div>
         </div>
