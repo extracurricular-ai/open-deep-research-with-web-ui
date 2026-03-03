@@ -314,11 +314,14 @@ def get_search_tools(cfg):
     """Get search tools based on config.
 
     Returns a list of search tools with fallback support.
-    engine can be: DDGS, META_SOTA, or comma-separated for fallback (e.g., META_SOTA,DDGS)
+    engines is a list like ["DDGS"], ["META_SOTA", "DDGS"], etc.
     """
-    search_engine = cfg["search"]["engine"]
+    engines = cfg["search"].get("engines", ["DDGS"])
     max_results = cfg["search"]["max_results"]
-    engines = [e.strip() for e in search_engine.split(",")]
+
+    # Backward compat: if old "engine" string key exists, convert it
+    if not engines and "engine" in cfg["search"]:
+        engines = [e.strip() for e in cfg["search"]["engine"].split(",")]
 
     tools = []
     for engine in engines:

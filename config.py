@@ -26,7 +26,7 @@ DEFAULTS = {
         "reasoning_effort": "high",
     },
     "search": {
-        "engine": "DDGS",
+        "engines": ["DDGS"],
         "max_results": 10,
     },
     "browser": {

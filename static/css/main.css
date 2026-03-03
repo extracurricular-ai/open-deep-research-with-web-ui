@@ -1501,6 +1501,26 @@ footer p {
     font-size: var(--fs-base);
 }
 
+.settings-checkbox-group {
+    display: flex;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+}
+
+.settings-checkbox {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: var(--fs-sm);
+    color: var(--text-1);
+    cursor: pointer;
+}
+
+.settings-checkbox input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
 .settings-advanced-toggle {
     font-weight: 600;
     font-size: var(--fs-sm);

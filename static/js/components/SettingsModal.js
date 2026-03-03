@@ -20,11 +20,9 @@ const RUN_MODE_OPTIONS = [
     { value: 'live', label: 'Live (leave = stop)' },
 ];
 
-const SEARCH_ENGINE_OPTIONS = [
-    { value: 'DDGS', label: 'DuckDuckGo' },
-    { value: 'META_SOTA', label: 'MetaSo' },
-    { value: 'META_SOTA,DDGS', label: 'MetaSo with DuckDuckGo fallback' },
-    { value: 'DDGS,META_SOTA', label: 'DuckDuckGo with MetaSo fallback' },
+const SEARCH_ENGINES = [
+    { id: 'DDGS', label: 'DuckDuckGo' },
+    { id: 'META_SOTA', label: 'MetaSo' },
 ];
 
 function getClientApiKeys() {
@@ -74,6 +72,43 @@ function NumberInput({ label, value, onChange, min, max, step }) {
                 step=${step || 1}
                 onInput=${(e) => onChange(parseInt(e.target.value, 10) || 0)}
             />
+        </div>
+    `;
+}
+
+function EngineCheckboxes({ selected, onChange }) {
+    const current = selected || [];
+
+    function toggle(id) {
+        const next = current.includes(id)
+            ? current.filter(e => e !== id)
+            : [...current, id];
+        onChange(next.length > 0 ? next : undefined);
+    }
+
+    function getTag(id) {
+        const idx = current.indexOf(id);
+        if (idx < 0) return '';
+        if (idx === 0) return ' (primary)';
+        return ` (fallback #${idx})`;
+    }
+
+    return html`
+        <div class="settings-field">
+            <label>Search Engines</label>
+            <p class="settings-hint">First selected engine is primary. Others are used as fallback in order.</p>
+            <div class="settings-checkbox-group">
+                ${SEARCH_ENGINES.map(eng => html`
+                    <label class="settings-checkbox" key=${eng.id}>
+                        <input
+                            type="checkbox"
+                            checked=${current.includes(eng.id)}
+                            onChange=${() => toggle(eng.id)}
+                        />
+                        ${eng.label}${getTag(eng.id)}
+                    </label>
+                `)}
+            </div>
         </div>
     `;
 }
@@ -228,18 +263,10 @@ function ClientSettings() {
                     </div>
 
                     <h4>Search</h4>
-                    <div class="settings-field">
-                        <label>Search Engine</label>
-                        <select
-                            value=${g('search', 'engine') || ''}
-                            onChange=${(e) => updateOverride('search', 'engine', e.target.value || undefined)}
-                        >
-                            <option value="">server default</option>
-                            ${SEARCH_ENGINE_OPTIONS.map(opt => html`
-                                <option value=${opt.value}>${opt.label}</option>
-                            `)}
-                        </select>
-                    </div>
+                    <${EngineCheckboxes}
+                        selected=${g('search', 'engines')}
+                        onChange=${(v) => updateOverride('search', 'engines', v)}
+                    />
                     <${OverrideNumberInput} label="Max Results"
                         value=${g('search', 'max_results')}
                         onChange=${(v) => updateOverride('search', 'max_results', v)}
@@ -431,17 +458,13 @@ function ServerConfigEditor({ password }) {
 
         <div class="settings-section">
             <h3>Search</h3>
-            <div class="settings-field">
-                <label>Search Engine</label>
-                <select
-                    value=${config.search.engine}
-                    onChange=${(e) => update('search', 'engine', e.target.value)}
-                >
-                    ${SEARCH_ENGINE_OPTIONS.map(opt => html`
-                        <option value=${opt.value}>${opt.label}</option>
-                    `)}
-                </select>
-            </div>
+            <${EngineCheckboxes}
+                selected=${config.search.engines || ['DDGS']}
+                onChange=${(v) => setConfig({
+                    ...config,
+                    search: { ...config.search, engines: v || ['DDGS'] },
+                })}
+            />
             <${NumberInput} label="Max Results"
                 value=${config.search.max_results}
                 onChange=${(v) => update('search', 'max_results', v)}
