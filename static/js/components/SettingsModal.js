@@ -3,6 +3,7 @@ import { useState, useEffect } from 'preact/hooks';
 import {
     useStore, setState, toggleSettings, toggleTheme, setRunMode,
     verifyAdminPassword, loadServerConfig, saveServerConfig,
+    getClientConfig, saveClientConfig,
 } from '../state.js';
 
 const API_KEY_FIELDS = [
@@ -77,8 +78,31 @@ function NumberInput({ label, value, onChange, min, max, step }) {
     `;
 }
 
+/** Optional override input — shows placeholder with server default, empty = use server value */
+function OverrideNumberInput({ label, value, onChange, placeholder, min, max }) {
+    return html`
+        <div class="settings-field">
+            <label>${label}</label>
+            <input
+                type="number"
+                class="settings-number-input"
+                value=${value ?? ''}
+                placeholder=${placeholder || 'server default'}
+                min=${min}
+                max=${max}
+                onInput=${(e) => {
+                    const v = e.target.value;
+                    onChange(v === '' ? undefined : parseInt(v, 10));
+                }}
+            />
+        </div>
+    `;
+}
+
 function ClientSettings() {
     const [keys, setKeys] = useState(getClientApiKeys);
+    const [overrides, setOverrides] = useState(() => getClientConfig());
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const theme = useStore(s => s.theme);
     const runMode = useStore(s => s.runMode);
 
@@ -100,6 +124,26 @@ function ClientSettings() {
         }
         setKeys(empty);
     }
+
+    function updateOverride(section, key, value) {
+        const next = { ...overrides };
+        if (!next[section]) next[section] = {};
+        if (value === undefined || value === '') {
+            delete next[section][key];
+            if (Object.keys(next[section]).length === 0) delete next[section];
+        } else {
+            next[section][key] = value;
+        }
+        setOverrides(next);
+        saveClientConfig(next);
+    }
+
+    function clearOverrides() {
+        setOverrides({});
+        saveClientConfig({});
+    }
+
+    const g = (section, key) => overrides[section]?.[key];
 
     return html`
         <div class="settings-section">
@@ -138,6 +182,94 @@ function ClientSettings() {
                     `)}
                 </select>
             </div>
+        </div>
+
+        <div class="settings-section">
+            <button
+                class="btn btn-ghost settings-advanced-toggle"
+                onClick=${() => setAdvancedOpen(!advancedOpen)}
+            >
+                ${advancedOpen ? '\u25BC' : '\u25B6'} Advanced Overrides
+            </button>
+            <p class="settings-hint">Override server defaults for this browser. Leave empty to use server values.</p>
+
+            ${advancedOpen && html`
+                <div class="settings-advanced">
+                    <h4>Agent</h4>
+                    <${OverrideNumberInput} label="Search Agent Max Steps"
+                        value=${g('agent', 'search_agent_max_steps')}
+                        onChange=${(v) => updateOverride('agent', 'search_agent_max_steps', v)}
+                        min=${1} max=${100} />
+                    <${OverrideNumberInput} label="Manager Agent Max Steps"
+                        value=${g('agent', 'manager_agent_max_steps')}
+                        onChange=${(v) => updateOverride('agent', 'manager_agent_max_steps', v)}
+                        min=${1} max=${100} />
+                    <${OverrideNumberInput} label="Planning Interval"
+                        value=${g('agent', 'planning_interval')}
+                        onChange=${(v) => updateOverride('agent', 'planning_interval', v)}
+                        min=${1} max=${50} />
+
+                    <h4>Model</h4>
+                    <${OverrideNumberInput} label="Max Completion Tokens"
+                        value=${g('model', 'max_completion_tokens')}
+                        onChange=${(v) => updateOverride('model', 'max_completion_tokens', v)}
+                        min=${256} max=${65536} />
+                    <div class="settings-field">
+                        <label>Reasoning Effort (o1 only)</label>
+                        <select
+                            value=${g('model', 'reasoning_effort') || ''}
+                            onChange=${(e) => updateOverride('model', 'reasoning_effort', e.target.value || undefined)}
+                        >
+                            <option value="">server default</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+
+                    <h4>Search</h4>
+                    <div class="settings-field">
+                        <label>Search Engine</label>
+                        <select
+                            value=${g('search', 'engine') || ''}
+                            onChange=${(e) => updateOverride('search', 'engine', e.target.value || undefined)}
+                        >
+                            <option value="">server default</option>
+                            ${SEARCH_ENGINE_OPTIONS.map(opt => html`
+                                <option value=${opt.value}>${opt.label}</option>
+                            `)}
+                        </select>
+                    </div>
+                    <${OverrideNumberInput} label="Max Results"
+                        value=${g('search', 'max_results')}
+                        onChange=${(v) => updateOverride('search', 'max_results', v)}
+                        min=${1} max=${50} />
+
+                    <h4>Browser</h4>
+                    <${OverrideNumberInput} label="Viewport Size (chars)"
+                        value=${g('browser', 'viewport_size')}
+                        onChange=${(v) => updateOverride('browser', 'viewport_size', v)}
+                        min=${1024} max=${20480} />
+                    <${OverrideNumberInput} label="Request Timeout (seconds)"
+                        value=${g('browser', 'request_timeout')}
+                        onChange=${(v) => updateOverride('browser', 'request_timeout', v)}
+                        min=${10} max=${600} />
+
+                    <h4>Limits</h4>
+                    <${OverrideNumberInput} label="Text Limit (chars)"
+                        value=${g('limits', 'text_limit')}
+                        onChange=${(v) => updateOverride('limits', 'text_limit', v)}
+                        min=${1000} max=${500000} />
+                    <${OverrideNumberInput} label="Max Field Length (chars)"
+                        value=${g('limits', 'max_field_length')}
+                        onChange=${(v) => updateOverride('limits', 'max_field_length', v)}
+                        min=${1000} max=${200000} />
+
+                    <button class="btn btn-ghost btn-sm" onClick=${clearOverrides} style="margin-top: var(--sp-2)">
+                        Reset all overrides
+                    </button>
+                </div>
+            `}
         </div>
     `;
 }

@@ -1501,6 +1501,24 @@ footer p {
     font-size: var(--fs-base);
 }
 
+.settings-advanced-toggle {
+    font-weight: 600;
+    font-size: var(--fs-sm);
+    padding: 0;
+    margin-bottom: var(--sp-1);
+}
+
+.settings-advanced h4 {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-1);
+    margin: var(--sp-3) 0 var(--sp-1) 0;
+}
+
+.settings-advanced h4:first-child {
+    margin-top: var(--sp-2);
+}
+
 .settings-password-gate {
     display: flex;
     flex-direction: column;

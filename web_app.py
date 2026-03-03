@@ -204,6 +204,7 @@ def run_agent_stream():
         model_id = data.get("model_id", "o1")
         run_mode = data.get("run_mode", "background")
         client_api_keys = data.get("api_keys", {})
+        client_config = data.get("client_config", {})
 
         if run_mode not in ('background', 'auto-kill', 'live'):
             run_mode = 'background'
@@ -214,6 +215,12 @@ def run_agent_stream():
         # Build merged config: server config + client overrides
         server_cfg = load_config()
         override = {"model": {"default_model_id": model_id}}
+
+        # Merge client config overrides (excluding models — admin-only)
+        if client_config:
+            client_config.pop("models", None)
+            override = _deep_merge(override, client_config)
+
         if client_api_keys:
             # Client keys override server keys (non-empty only)
             merged_keys = {}

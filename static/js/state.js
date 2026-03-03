@@ -505,6 +505,7 @@ export async function startStream() {
     const mode = state.runMode;
 
     const apiKeys = getClientApiKeys();
+    const clientConfig = getClientConfig();
 
     if (mode === 'auto-kill') {
         // Auto-kill: fire-and-forget, don't block UI
@@ -516,7 +517,7 @@ export async function startStream() {
             const response = await fetch('/api/run/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys }),
+                body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys, client_config: clientConfig }),
             });
 
             if (!response.ok) {
@@ -620,7 +621,7 @@ export async function startStream() {
         const response = await fetch('/api/run/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys }),
+            body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys, client_config: clientConfig }),
         });
 
         if (!response.ok) {
@@ -965,6 +966,32 @@ export function getClientApiKeys() {
         if (val) keys[k] = val;
     }
     return keys;
+}
+
+/** Read all client config overrides from localStorage.
+ *  Only returns non-empty values so server defaults are preserved. */
+export function getClientConfig() {
+    const config = {};
+    const raw = localStorage.getItem('odr-client-config');
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            // Only include sections with actual values
+            for (const [section, values] of Object.entries(parsed)) {
+                if (section === 'models') continue; // models not overridable
+                if (values && typeof values === 'object' && Object.keys(values).length > 0) {
+                    config[section] = values;
+                }
+            }
+        } catch (e) {
+            // ignore invalid JSON
+        }
+    }
+    return config;
+}
+
+export function saveClientConfig(config) {
+    localStorage.setItem('odr-client-config', JSON.stringify(config));
 }
 
 /**
