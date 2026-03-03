@@ -7,6 +7,7 @@ import requests
 import json
 
 from dotenv import load_dotenv
+from config import load_config
 from rich.console import Console
 from smolagents.monitoring import AgentLogger
 from smolagents.memory import ActionStep, PlanningStep, FinalAnswerStep
@@ -40,10 +41,9 @@ _json_out = sys.stdout
 sys.stdout = sys.stderr
 
 _emit_lock = threading.Lock()
-MAX_FIELD_LENGTH = 50000
 
 
-def _truncate(s, max_len=MAX_FIELD_LENGTH):
+def _truncate(s, max_len=50000):
     """Truncate large strings to avoid huge JSON lines."""
     if s and isinstance(s, str) and len(s) > max_len:
         return s[:max_len] + f"\n... [truncated, {len(s)} total chars]"
@@ -282,7 +282,9 @@ def parse_args():
     parser.add_argument(
         "question", type=str, help="for example: 'How many studio albums did Mercedes Sosa release before 2007?'"
     )
-    parser.add_argument("--model-id", type=str, default="o1")
+    parser.add_argument("--model-id", type=str, default=None)
+    parser.add_argument("--config-json", type=str, default=None,
+                        help="JSON string of merged config (passed by web_app)")
     return parser.parse_args()
 
 
@@ -290,26 +292,32 @@ custom_role_conversions = {"tool-call": "assistant", "tool-response": "user"}
 
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0"
 
-BROWSER_CONFIG = {
-    "viewport_size": 1024 * 5,
-    "downloads_folder": "downloads_folder",
-    "request_kwargs": {
-        "headers": {"User-Agent": user_agent},
-        "timeout": 300,
-    },
-    "serpapi_key": os.getenv("SERPAPI_API_KEY"),
-}
 
-os.makedirs(f"./{BROWSER_CONFIG['downloads_folder']}", exist_ok=True)
+def _build_browser_config(cfg):
+    """Build BROWSER_CONFIG dict from config."""
+    serpapi_key = cfg["api_keys"].get("serpapi") or os.getenv("SERPAPI_API_KEY")
+    return {
+        "viewport_size": cfg["browser"]["viewport_size"],
+        "downloads_folder": "downloads_folder",
+        "request_kwargs": {
+            "headers": {"User-Agent": user_agent},
+            "timeout": cfg["browser"]["request_timeout"],
+        },
+        "serpapi_key": serpapi_key,
+    }
 
 
-def get_search_tools(max_results=10):
-    """Get search tools based on SEARCH_ENGINE environment variable.
+os.makedirs("./downloads_folder", exist_ok=True)
+
+
+def get_search_tools(cfg):
+    """Get search tools based on config.
 
     Returns a list of search tools with fallback support.
-    SEARCH_ENGINE can be: DDGS, META_SOTA, or comma-separated for fallback (e.g., META_SOTA,DDGS)
+    engine can be: DDGS, META_SOTA, or comma-separated for fallback (e.g., META_SOTA,DDGS)
     """
-    search_engine = os.getenv("SEARCH_ENGINE", "DDGS")
+    search_engine = cfg["search"]["engine"]
+    max_results = cfg["search"]["max_results"]
     engines = [e.strip() for e in search_engine.split(",")]
 
     tools = []
@@ -318,7 +326,7 @@ def get_search_tools(max_results=10):
             emit_event("info", content="Using DuckDuckGo search engine")
             tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
         elif engine == "META_SOTA":
-            api_key = os.getenv("META_SOTA_API_KEY")
+            api_key = cfg["api_keys"].get("meta_sota") or os.getenv("META_SOTA_API_KEY")
             if not api_key:
                 emit_event("info", content="META_SOTA_API_KEY not found, skipping MetaSo search")
                 continue
@@ -334,24 +342,37 @@ def get_search_tools(max_results=10):
     return tools
 
 
-def create_agent(model_id="o1"):
+def create_agent(cfg):
+    """Create the agent hierarchy using the provided config dict."""
+    model_id = cfg["model"]["default_model_id"]
+    agent_cfg = cfg["agent"]
+
+    # Set API keys in environment for LiteLLM (client keys override server keys)
+    for env_key, cfg_key in [
+        ("OPENAI_API_KEY", "openai"),
+        ("DEEPSEEK_API_KEY", "deepseek"),
+    ]:
+        key_val = cfg["api_keys"].get(cfg_key)
+        if key_val:
+            os.environ[env_key] = key_val
+
     model_params = {
         "model_id": model_id,
         "custom_role_conversions": custom_role_conversions,
-        "max_completion_tokens": 8192,
+        "max_completion_tokens": cfg["model"]["max_completion_tokens"],
     }
     if model_id == "o1":
-        model_params["reasoning_effort"] = "high"
+        model_params["reasoning_effort"] = cfg["model"]["reasoning_effort"]
     model = LiteLLMModel(**model_params)
 
-    text_limit = 100000
-    browser = SimpleTextBrowser(**BROWSER_CONFIG)
+    text_limit = cfg["limits"]["text_limit"]
+    browser_config = _build_browser_config(cfg)
+    browser = SimpleTextBrowser(**browser_config)
 
-    # Get search tools based on environment configuration
-    search_tools = get_search_tools(max_results=10)
+    search_tools = get_search_tools(cfg)
 
     WEB_TOOLS = [
-        *search_tools,  # Add configured search engine(s)
+        *search_tools,
         VisitTool(browser),
         PageUpTool(browser),
         PageDownTool(browser),
@@ -363,9 +384,9 @@ def create_agent(model_id="o1"):
     text_webbrowser_agent = ToolCallingAgent(
         model=model,
         tools=WEB_TOOLS,
-        max_steps=20,
-        verbosity_level=2,
-        planning_interval=4,
+        max_steps=agent_cfg["search_agent_max_steps"],
+        verbosity_level=agent_cfg["verbosity_level"],
+        planning_interval=agent_cfg["planning_interval"],
         name="search_agent",
         description="""A team member that will search the internet to answer your question.
     Ask him for all your questions that require browsing the web.
@@ -394,10 +415,10 @@ def create_agent(model_id="o1"):
     manager_agent = CodeAgent(
         model=model,
         tools=[visualizer, TextInspectorTool(model, text_limit)],
-        max_steps=12,
-        verbosity_level=2,
+        max_steps=agent_cfg["manager_agent_max_steps"],
+        verbosity_level=agent_cfg["verbosity_level"],
         additional_authorized_imports=safe_imports,
-        planning_interval=4,
+        planning_interval=agent_cfg["planning_interval"],
         managed_agents=[text_webbrowser_agent],
         step_callbacks=_step_callbacks,
         logger=_streaming_logger,
@@ -439,7 +460,25 @@ def create_agent(model_id="o1"):
 def main():
     args = parse_args()
 
-    agent = create_agent(model_id=args.model_id)
+    # Build config: start from server config, override with CLI-passed config
+    cfg = load_config()
+    if args.config_json:
+        import copy
+        from config import _deep_merge
+        cli_cfg = json.loads(args.config_json)
+        cfg = _deep_merge(cfg, cli_cfg)
+
+    # CLI --model-id overrides config
+    if args.model_id:
+        cfg["model"]["default_model_id"] = args.model_id
+
+    # Update truncation limit from config
+    global _truncate
+    max_field = cfg["limits"]["max_field_length"]
+    _orig_truncate = _truncate
+    _truncate = lambda s, max_len=max_field: _orig_truncate(s, max_len)
+
+    agent = create_agent(cfg)
 
     agent.run(args.question)
 

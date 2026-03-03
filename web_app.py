@@ -20,6 +20,7 @@ from db import (
     complete_session, list_sessions, get_session, delete_session as db_delete_session,
     get_events_after, get_session_status,
 )
+from config import load_config, save_config, _deep_merge
 
 load_dotenv(override=True)
 
@@ -202,12 +203,27 @@ def run_agent_stream():
         question = data.get("question", "").strip()
         model_id = data.get("model_id", "o1")
         run_mode = data.get("run_mode", "background")
+        client_api_keys = data.get("api_keys", {})
 
         if run_mode not in ('background', 'auto-kill', 'live'):
             run_mode = 'background'
 
         if not question:
             return jsonify({"error": "Question is required"}), 400
+
+        # Build merged config: server config + client overrides
+        server_cfg = load_config()
+        override = {"model": {"default_model_id": model_id}}
+        if client_api_keys:
+            # Client keys override server keys (non-empty only)
+            merged_keys = {}
+            for k, v in client_api_keys.items():
+                if v:  # Only override if client provided a non-empty value
+                    merged_keys[k] = v
+            if merged_keys:
+                override["api_keys"] = merged_keys
+        merged_cfg = _deep_merge(server_cfg, override)
+        config_json_str = json.dumps(merged_cfg)
 
         # Create session with unique ID
         session_id = str(uuid.uuid4())
@@ -216,7 +232,7 @@ def run_agent_stream():
         # Start agent in subprocess
         env = os.environ.copy()
         process = subprocess.Popen(
-            [sys.executable, '-u', 'run.py', question, '--model-id', model_id],
+            [sys.executable, '-u', 'run.py', question, '--config-json', config_json_str],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
@@ -428,47 +444,63 @@ def stop_session(session_id):
 
 @app.route("/api/models", methods=["GET"])
 def get_models():
-    """Return list of available models"""
-    models = [
-        {"id": "o1", "name": "OpenAI o1", "description": "Advanced reasoning model"},
-        {
-            "id": "gpt-4-turbo",
-            "name": "GPT-4 Turbo",
-            "description": "Fast and powerful",
-        },
-        {
-            "id": "gpt-4.1-mini",
-            "name": "GPT-4.1 Mini",
-            "description": "Lightweight and efficient",
-        },
-        {
-            "id": "gpt-4.1-nano",
-            "name": "GPT-4.1 Nano",
-            "description": "Ultra-lightweight model",
-        },
-        {
-            "id": "gpt-4o-mini",
-            "name": "GPT-4o Mini",
-            "description": "Efficient and cost-effective",
-        },
-        {
-            "id": "deepseek/deepseek-chat",
-            "name": "DeepSeek Chat",
-            "description": "Fast chat model from DeepSeek",
-        },
-        {
-            "id": "deepseek/deepseek-reasoner",
-            "name": "DeepSeek Reasoner",
-            "description": "Reasoning model from DeepSeek",
-        },
-        {"id": "ollama/mistral", "name": "Ollama Mistral", "description": "Local model"},
-        {
-            "id": "claude-3-5-sonnet-20241022",
-            "name": "Claude 3.5 Sonnet",
-            "description": "Anthropic model",
-        },
-    ]
-    return jsonify(models)
+    """Return list of available models from config"""
+    cfg = load_config()
+    return jsonify(cfg.get("models", []))
+
+
+# ===== Config API =====
+
+def _mask_api_key(key):
+    """Mask an API key for display: 'sk-abc123xyz' -> 'sk-***xyz'"""
+    if not key or len(key) < 6:
+        return key
+    return key[:3] + "***" + key[-3:]
+
+
+@app.route("/api/config/meta", methods=["GET"])
+def config_meta():
+    """Return config UI metadata (no auth required)"""
+    enable_ui = os.getenv("ENABLE_CONFIG_UI", "false").lower() in ("true", "1", "yes")
+    return jsonify({"enable_config_ui": enable_ui})
+
+
+@app.route("/api/config", methods=["GET"])
+def get_config_endpoint():
+    """Return server config with API keys masked"""
+    cfg = load_config()
+    # Mask API keys for display
+    if "api_keys" in cfg:
+        masked = {}
+        for k, v in cfg["api_keys"].items():
+            masked[k] = _mask_api_key(v) if v else ""
+        cfg["api_keys"] = masked
+    return jsonify(cfg)
+
+
+@app.route("/api/config", methods=["POST"])
+def update_config_endpoint():
+    """Update server config (requires admin password when ENABLE_CONFIG_UI is true)"""
+    enable_ui = os.getenv("ENABLE_CONFIG_UI", "false").lower() in ("true", "1", "yes")
+    if not enable_ui:
+        return jsonify({"error": "Config UI is disabled"}), 403
+
+    data = request.json
+    password = data.get("_password", "")
+    admin_password = os.getenv("CONFIG_ADMIN_PASSWORD", "")
+
+    if not admin_password or password != admin_password:
+        return jsonify({"error": "Invalid admin password"}), 401
+
+    # Remove password from config data before saving
+    config_data = {k: v for k, v in data.items() if k != "_password"}
+
+    # Merge with existing config (so partial updates work)
+    current = load_config()
+    merged = _deep_merge(current, config_data)
+    save_config(merged)
+
+    return jsonify({"success": True})
 
 
 # ===== Session History API =====
