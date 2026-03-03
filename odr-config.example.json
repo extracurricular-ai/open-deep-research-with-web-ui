@@ -1,0 +1,43 @@
+{
+  "agent": {
+    "search_agent_max_steps": 20,
+    "manager_agent_max_steps": 12,
+    "planning_interval": 4,
+    "verbosity_level": 2
+  },
+  "model": {
+    "default_model_id": "o1",
+    "max_completion_tokens": 8192,
+    "reasoning_effort": "high"
+  },
+  "search": {
+    "engine": "DDGS",
+    "max_results": 10
+  },
+  "browser": {
+    "viewport_size": 5120,
+    "request_timeout": 300
+  },
+  "limits": {
+    "text_limit": 100000,
+    "max_field_length": 50000
+  },
+  "api_keys": {
+    "openai": "",
+    "deepseek": "",
+    "serpapi": "",
+    "meta_sota": "",
+    "hf_token": ""
+  },
+  "models": [
+    {"id": "o1", "name": "OpenAI o1", "description": "Advanced reasoning model"},
+    {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "description": "Fast and powerful"},
+    {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini", "description": "Lightweight and efficient"},
+    {"id": "gpt-4.1-nano", "name": "GPT-4.1 Nano", "description": "Ultra-lightweight model"},
+    {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "description": "Efficient and cost-effective"},
+    {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat", "description": "Fast chat model from DeepSeek"},
+    {"id": "deepseek/deepseek-reasoner", "name": "DeepSeek Reasoner", "description": "Reasoning model from DeepSeek"},
+    {"id": "ollama/mistral", "name": "Ollama Mistral", "description": "Local model"},
+    {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet", "description": "Anthropic model"}
+  ]
+}
