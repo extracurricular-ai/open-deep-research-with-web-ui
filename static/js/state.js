@@ -918,8 +918,25 @@ export async function loadConfigMeta() {
     }
 }
 
-export async function loadServerConfig() {
-    const response = await fetch('/api/config');
+export async function verifyAdminPassword(password) {
+    try {
+        const response = await fetch('/api/config/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        return data.valid === true;
+    } catch (e) {
+        return false;
+    }
+}
+
+export async function loadServerConfig(password) {
+    const response = await fetch('/api/config', {
+        headers: { 'X-Admin-Password': password },
+    });
     if (!response.ok) throw new Error('Failed to load config');
     return response.json();
 }

@@ -1501,6 +1501,20 @@ footer p {
     font-size: var(--fs-base);
 }
 
+.settings-password-gate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-6) var(--sp-4);
+    text-align: center;
+}
+
+.settings-password-gate form {
+    width: 100%;
+    max-width: 320px;
+}
+
 .settings-number-input {
     background: var(--surface-2);
     border: 1px solid var(--border);

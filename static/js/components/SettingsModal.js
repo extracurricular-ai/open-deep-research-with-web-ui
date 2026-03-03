@@ -2,7 +2,7 @@ import { html } from '../htm.js';
 import { useState, useEffect } from 'preact/hooks';
 import {
     useStore, setState, toggleSettings, toggleTheme, setRunMode,
-    loadServerConfig, saveServerConfig,
+    verifyAdminPassword, loadServerConfig, saveServerConfig,
 } from '../state.js';
 
 const API_KEY_FIELDS = [
@@ -142,8 +142,53 @@ function ClientSettings() {
     `;
 }
 
-function ServerSettings() {
+function ServerPasswordGate({ onUnlock }) {
     const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [verifying, setVerifying] = useState(false);
+
+    async function onSubmit(e) {
+        e.preventDefault();
+        if (!password) return;
+        setVerifying(true);
+        setError('');
+        const valid = await verifyAdminPassword(password);
+        setVerifying(false);
+        if (valid) {
+            onUnlock(password);
+        } else {
+            setError('Invalid admin password');
+        }
+    }
+
+    return html`
+        <div class="settings-password-gate">
+            <p class="settings-hint">Enter admin password to access server configuration.</p>
+            <form onSubmit=${onSubmit}>
+                <div class="settings-field">
+                    <div class="settings-key-input">
+                        <input
+                            type="password"
+                            value=${password}
+                            placeholder="Admin password..."
+                            onInput=${(e) => setPassword(e.target.value)}
+                            autocomplete="off"
+                            autofocus
+                        />
+                        <button
+                            type="submit"
+                            class="btn btn-submit btn-sm"
+                            disabled=${verifying || !password}
+                        >${verifying ? '...' : 'Unlock'}</button>
+                    </div>
+                </div>
+                ${error && html`<p class="settings-message settings-message-error">${error}</p>`}
+            </form>
+        </div>
+    `;
+}
+
+function ServerConfigEditor({ password }) {
     const [config, setConfig] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -151,7 +196,7 @@ function ServerSettings() {
     const [newModel, setNewModel] = useState({ id: '', name: '', description: '' });
 
     useEffect(() => {
-        loadServerConfig().then(cfg => {
+        loadServerConfig(password).then(cfg => {
             setConfig(cfg);
             setLoading(false);
         }).catch(() => setLoading(false));
@@ -191,10 +236,6 @@ function ServerSettings() {
     }
 
     async function onSave() {
-        if (!password) {
-            setMessage({ type: 'error', text: 'Admin password required' });
-            return;
-        }
         setSaving(true);
         setMessage(null);
         const result = await saveServerConfig(config, password);
@@ -207,21 +248,6 @@ function ServerSettings() {
     }
 
     return html`
-        <div class="settings-section">
-            <div class="settings-field">
-                <label>Admin Password</label>
-                <input
-                    type="password"
-                    class="settings-number-input"
-                    value=${password}
-                    placeholder="Enter admin password..."
-                    onInput=${(e) => setPassword(e.target.value)}
-                    autocomplete="off"
-                    style="width: 100%"
-                />
-            </div>
-        </div>
-
         <div class="settings-section">
             <h3>Agent</h3>
             <${NumberInput} label="Search Agent Max Steps"
@@ -380,6 +406,21 @@ function ServerSettings() {
             </button>
         </div>
     `;
+}
+
+function ServerSettings() {
+    const [adminPassword, setAdminPassword] = useState(null);
+
+    // Reset password whenever this component unmounts (tab switch / modal close)
+    useEffect(() => {
+        return () => setAdminPassword(null);
+    }, []);
+
+    if (!adminPassword) {
+        return html`<${ServerPasswordGate} onUnlock=${(pw) => setAdminPassword(pw)} />`;
+    }
+
+    return html`<${ServerConfigEditor} password=${adminPassword} />`;
 }
 
 export function SettingsModal() {

@@ -465,9 +465,37 @@ def config_meta():
     return jsonify({"enable_config_ui": enable_ui})
 
 
+def _check_admin_password(password):
+    """Validate admin password against env var."""
+    admin_password = os.getenv("CONFIG_ADMIN_PASSWORD", "")
+    return admin_password and password == admin_password
+
+
+@app.route("/api/config/verify", methods=["POST"])
+def verify_admin_password():
+    """Verify admin password without changing anything"""
+    enable_ui = os.getenv("ENABLE_CONFIG_UI", "false").lower() in ("true", "1", "yes")
+    if not enable_ui:
+        return jsonify({"error": "Config UI is disabled"}), 403
+
+    data = request.json
+    password = data.get("password", "")
+    if _check_admin_password(password):
+        return jsonify({"valid": True})
+    return jsonify({"valid": False}), 401
+
+
 @app.route("/api/config", methods=["GET"])
 def get_config_endpoint():
-    """Return server config with API keys masked"""
+    """Return server config with API keys masked. Requires admin password."""
+    enable_ui = os.getenv("ENABLE_CONFIG_UI", "false").lower() in ("true", "1", "yes")
+    if not enable_ui:
+        return jsonify({"error": "Config UI is disabled"}), 403
+
+    password = request.headers.get("X-Admin-Password", "")
+    if not _check_admin_password(password):
+        return jsonify({"error": "Invalid admin password"}), 401
+
     cfg = load_config()
     # Mask API keys for display
     if "api_keys" in cfg:
@@ -487,9 +515,8 @@ def update_config_endpoint():
 
     data = request.json
     password = data.get("_password", "")
-    admin_password = os.getenv("CONFIG_ADMIN_PASSWORD", "")
 
-    if not admin_password or password != admin_password:
+    if not _check_admin_password(password):
         return jsonify({"error": "Invalid admin password"}), 401
 
     # Remove password from config data before saving
