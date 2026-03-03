@@ -1349,6 +1349,158 @@ footer p {
     }
 }
 
+/* ===== Header Actions ===== */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.header-icon-btn {
+    font-size: var(--fs-lg);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+/* ===== Settings Modal ===== */
+.settings-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.settings-modal {
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--rad-lg);
+    width: min(560px, 90vw);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-modal-header h2 {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--text-0);
+    margin: 0;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 var(--sp-4);
+}
+
+.settings-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-2);
+    padding: var(--sp-2) var(--sp-3);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    transition: all var(--duration) var(--ease);
+}
+
+.settings-tab:hover {
+    color: var(--text-0);
+}
+
+.settings-tab-active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.settings-modal-body {
+    padding: var(--sp-4);
+    overflow-y: auto;
+    flex: 1;
+}
+
+.settings-section {
+    margin-bottom: var(--sp-4);
+}
+
+.settings-section:last-child {
+    margin-bottom: 0;
+}
+
+.settings-section h3 {
+    font-size: var(--fs-base);
+    font-weight: 600;
+    color: var(--text-0);
+    margin: 0 0 var(--sp-2) 0;
+}
+
+.settings-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    margin: 0 0 var(--sp-3) 0;
+}
+
+.settings-field {
+    margin-bottom: var(--sp-3);
+}
+
+.settings-field label {
+    display: block;
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    margin-bottom: var(--sp-1);
+}
+
+.settings-field select {
+    width: 100%;
+}
+
+.settings-key-input {
+    display: flex;
+    gap: var(--sp-1);
+}
+
+.settings-key-input input {
+    flex: 1;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-0);
+    padding: 6px 10px;
+    border-radius: var(--rad);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    transition: border-color var(--duration) var(--ease);
+}
+
+.settings-key-input input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.settings-toggle-vis {
+    width: 32px;
+    flex-shrink: 0;
+    font-size: var(--fs-base);
+}
+
 /* ===== Light Theme Override ===== */
 [data-theme="light"] {
     --surface-0: #fafafa;

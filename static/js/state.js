@@ -32,6 +32,10 @@ const state = {
     viewingHistory: false,
     viewingLiveSession: false,
     sidebarOpen: true,
+
+    // Settings
+    settingsOpen: false,
+    enableConfigUI: false,
 };
 
 const listeners = new Set();
@@ -500,6 +504,8 @@ export async function startStream() {
     const model = state.selectedModel;
     const mode = state.runMode;
 
+    const apiKeys = getClientApiKeys();
+
     if (mode === 'auto-kill') {
         // Auto-kill: fire-and-forget, don't block UI
         setState({
@@ -510,7 +516,7 @@ export async function startStream() {
             const response = await fetch('/api/run/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: q, model_id: model, run_mode: mode }),
+                body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys }),
             });
 
             if (!response.ok) {
@@ -614,7 +620,7 @@ export async function startStream() {
         const response = await fetch('/api/run/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: q, model_id: model, run_mode: mode }),
+            body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys }),
         });
 
         if (!response.ok) {
@@ -894,6 +900,33 @@ export async function newSession() {
 
 export function toggleSidebar() {
     setState({ sidebarOpen: !state.sidebarOpen });
+}
+
+export function toggleSettings() {
+    setState({ settingsOpen: !state.settingsOpen });
+}
+
+export async function loadConfigMeta() {
+    try {
+        const response = await fetch('/api/config/meta');
+        if (response.ok) {
+            const data = await response.json();
+            setState({ enableConfigUI: data.enable_config_ui });
+        }
+    } catch (e) {
+        console.error('Failed to load config meta:', e);
+    }
+}
+
+/** Read client API keys from localStorage */
+export function getClientApiKeys() {
+    const keys = {};
+    const keyNames = ['openai', 'deepseek', 'serpapi', 'meta_sota', 'hf_token'];
+    for (const k of keyNames) {
+        const val = localStorage.getItem(`odr-apikey-${k}`);
+        if (val) keys[k] = val;
+    }
+    return keys;
 }
 
 /**
