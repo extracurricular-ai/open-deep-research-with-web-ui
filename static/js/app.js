@@ -7,13 +7,14 @@ import { useEffect } from 'preact/hooks';
 import { html } from './htm.js';
 import {
     getState, setState, useStore,
-    loadModels, loadSessions, handlePageVisible, handlePageUnload,
+    loadModels, loadSessions, loadConfigMeta, handlePageVisible, handlePageUnload,
     startStream, stopStream, resetView, toggleSidebar,
 } from './state.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
 import { InputPanel } from './components/InputPanel.js';
 import { OutputPanel } from './components/OutputPanel.js';
+import { SettingsModal } from './components/SettingsModal.js';
 
 function App() {
     const sidebarOpen = useStore(s => s.sidebarOpen);
@@ -23,10 +24,11 @@ function App() {
         document.documentElement.setAttribute('data-theme', getState().theme);
     }, []);
 
-    // Load models and sessions on mount
+    // Load models, sessions, and config meta on mount
     useEffect(() => {
         loadModels();
         loadSessions();
+        loadConfigMeta();
     }, []);
 
     // Refresh state when tab becomes visible (bfcache restore, tab switch back)
@@ -92,6 +94,7 @@ function App() {
                     </footer>
                 </div>
             </div>
+            <${SettingsModal} />
         </div>
     `;
 }

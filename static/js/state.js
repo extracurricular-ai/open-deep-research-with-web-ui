@@ -32,6 +32,10 @@ const state = {
     viewingHistory: false,
     viewingLiveSession: false,
     sidebarOpen: true,
+
+    // Settings
+    settingsOpen: false,
+    enableConfigUI: false,
 };
 
 const listeners = new Set();
@@ -500,6 +504,9 @@ export async function startStream() {
     const model = state.selectedModel;
     const mode = state.runMode;
 
+    const apiKeys = getClientApiKeys();
+    const clientConfig = getClientConfig();
+
     if (mode === 'auto-kill') {
         // Auto-kill: fire-and-forget, don't block UI
         setState({
@@ -510,7 +517,7 @@ export async function startStream() {
             const response = await fetch('/api/run/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: q, model_id: model, run_mode: mode }),
+                body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys, client_config: clientConfig }),
             });
 
             if (!response.ok) {
@@ -614,7 +621,7 @@ export async function startStream() {
         const response = await fetch('/api/run/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: q, model_id: model, run_mode: mode }),
+            body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys, client_config: clientConfig }),
         });
 
         if (!response.ok) {
@@ -894,6 +901,97 @@ export async function newSession() {
 
 export function toggleSidebar() {
     setState({ sidebarOpen: !state.sidebarOpen });
+}
+
+export function toggleSettings() {
+    setState({ settingsOpen: !state.settingsOpen });
+}
+
+export async function loadConfigMeta() {
+    try {
+        const response = await fetch('/api/config/meta');
+        if (response.ok) {
+            const data = await response.json();
+            setState({ enableConfigUI: data.enable_config_ui });
+        }
+    } catch (e) {
+        console.error('Failed to load config meta:', e);
+    }
+}
+
+export async function verifyAdminPassword(password) {
+    try {
+        const response = await fetch('/api/config/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        return data.valid === true;
+    } catch (e) {
+        return false;
+    }
+}
+
+export async function loadServerConfig(password) {
+    const response = await fetch('/api/config', {
+        headers: { 'X-Admin-Password': password },
+    });
+    if (!response.ok) throw new Error('Failed to load config');
+    return response.json();
+}
+
+export async function saveServerConfig(config, password) {
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...config, _password: password }),
+        });
+        const data = await response.json();
+        if (!response.ok) return { success: false, error: data.error };
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+}
+
+/** Read client API keys from localStorage */
+export function getClientApiKeys() {
+    const keys = {};
+    const keyNames = ['openai', 'deepseek', 'serpapi', 'meta_sota', 'hf_token'];
+    for (const k of keyNames) {
+        const val = localStorage.getItem(`odr-apikey-${k}`);
+        if (val) keys[k] = val;
+    }
+    return keys;
+}
+
+/** Read all client config overrides from localStorage.
+ *  Only returns non-empty values so server defaults are preserved. */
+export function getClientConfig() {
+    const config = {};
+    const raw = localStorage.getItem('odr-client-config');
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            // Only include sections with actual values
+            for (const [section, values] of Object.entries(parsed)) {
+                if (section === 'models') continue; // models not overridable
+                if (values && typeof values === 'object' && Object.keys(values).length > 0) {
+                    config[section] = values;
+                }
+            }
+        } catch (e) {
+            // ignore invalid JSON
+        }
+    }
+    return config;
+}
+
+export function saveClientConfig(config) {
+    localStorage.setItem('odr-client-config', JSON.stringify(config));
 }
 
 /**

@@ -64,6 +64,9 @@ odr_sessions.db
 odr_sessions.db-wal
 odr_sessions.db-shm
 
+# User config (contains API keys — use odr-config.example.json as template)
+odr-config.json
+
 # Flask stuff:
 instance/
 .webassets-cache
