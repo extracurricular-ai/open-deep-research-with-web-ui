@@ -21,12 +21,21 @@ DEFAULTS = {
         "verbosity_level": 2,
     },
     "model": {
+        "providers": [
+            {"provider": "openai", "api_key": "", "base_url": ""},
+            {"provider": "deepseek", "api_key": "", "base_url": ""},
+        ],
         "default_model_id": "o1",
         "max_completion_tokens": 8192,
         "reasoning_effort": "high",
     },
     "search": {
-        "engines": ["DDGS"],
+        # Order matters: first provider is primary, rest are tried as fallbacks in list order.
+        "providers": [
+            {"provider": "DDGS", "key": ""},
+            {"provider": "SERPAPI", "key": ""},
+            {"provider": "META_SOTA", "key": ""},
+        ],
         "max_results": 10,
     },
     "browser": {
@@ -37,11 +46,7 @@ DEFAULTS = {
         "text_limit": 100000,
         "max_field_length": 50000,
     },
-    "api_keys": {
-        "openai": "",
-        "deepseek": "",
-        "serpapi": "",
-        "meta_sota": "",
+    "other_keys": {
         "hf_token": "",
     },
     "models": [

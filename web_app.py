@@ -203,7 +203,6 @@ def run_agent_stream():
         question = data.get("question", "").strip()
         model_id = data.get("model_id", "o1")
         run_mode = data.get("run_mode", "background")
-        client_api_keys = data.get("api_keys", {})
         client_config = data.get("client_config", {})
 
         if run_mode not in ('background', 'auto-kill', 'live'):
@@ -221,14 +220,6 @@ def run_agent_stream():
             client_config.pop("models", None)
             override = _deep_merge(override, client_config)
 
-        if client_api_keys:
-            # Client keys override server keys (non-empty only)
-            merged_keys = {}
-            for k, v in client_api_keys.items():
-                if v:  # Only override if client provided a non-empty value
-                    merged_keys[k] = v
-            if merged_keys:
-                override["api_keys"] = merged_keys
         merged_cfg = _deep_merge(server_cfg, override)
         config_json_str = json.dumps(merged_cfg)
 
@@ -504,12 +495,16 @@ def get_config_endpoint():
         return jsonify({"error": "Invalid admin password"}), 401
 
     cfg = load_config()
-    # Mask API keys for display
-    if "api_keys" in cfg:
-        masked = {}
-        for k, v in cfg["api_keys"].items():
-            masked[k] = _mask_api_key(v) if v else ""
-        cfg["api_keys"] = masked
+    # Mask sensitive keys for display
+    for p in cfg.get("model", {}).get("providers", []):
+        if p.get("api_key"):
+            p["api_key"] = _mask_api_key(p["api_key"])
+    for p in cfg.get("search", {}).get("providers", []):
+        if p.get("key"):
+            p["key"] = _mask_api_key(p["key"])
+    for k, v in cfg.get("other_keys", {}).items():
+        if v:
+            cfg["other_keys"][k] = _mask_api_key(v)
     return jsonify(cfg)
 
 
@@ -526,12 +521,28 @@ def update_config_endpoint():
     if not _check_admin_password(password):
         return jsonify({"error": "Invalid admin password"}), 401
 
-    # Remove password from config data before saving
-    config_data = {k: v for k, v in data.items() if k != "_password"}
+    # Remove password and legacy api_keys from config data before saving
+    config_data = {k: v for k, v in data.items() if k not in ("_password", "api_keys")}
 
     # Merge with existing config (so partial updates work)
     current = load_config()
     merged = _deep_merge(current, config_data)
+
+    # Preserve original keys when masked values (containing '***') are sent back
+    for i, p in enumerate(merged.get("model", {}).get("providers", [])):
+        if "***" in (p.get("api_key") or ""):
+            orig = current.get("model", {}).get("providers", [])
+            if i < len(orig):
+                p["api_key"] = orig[i].get("api_key", "")
+    for i, p in enumerate(merged.get("search", {}).get("providers", [])):
+        if "***" in (p.get("key") or ""):
+            orig = current.get("search", {}).get("providers", [])
+            if i < len(orig):
+                p["key"] = orig[i].get("key", "")
+    for k, v in merged.get("other_keys", {}).items():
+        if "***" in (v or ""):
+            merged["other_keys"][k] = current.get("other_keys", {}).get(k, "")
+
     save_config(merged)
 
     return jsonify({"success": True})

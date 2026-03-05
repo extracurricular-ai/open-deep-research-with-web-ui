@@ -293,9 +293,31 @@ custom_role_conversions = {"tool-call": "assistant", "tool-response": "user"}
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0"
 
 
+def _find_search_provider_key(cfg, provider_name):
+    """Find the key for a search provider from cfg['search']['providers']."""
+    for entry in cfg["search"].get("providers", []):
+        if entry.get("provider") == provider_name:
+            return entry.get("key") or None
+    return None
+
+
+def _find_model_provider(cfg, model_id):
+    """Find api_key and base_url for a model_id from model.providers.
+
+    Matches model_id prefix (e.g. 'deepseek/deepseek-chat' -> 'deepseek')
+    to provider name. Models without a prefix (e.g. 'o1', 'gpt-4o') match 'openai'.
+    """
+    providers = cfg["model"].get("providers", [])
+    prefix = model_id.split("/")[0] if "/" in model_id else "openai"
+    for p in providers:
+        if p.get("provider", "").lower() == prefix.lower():
+            return p.get("api_key") or None, p.get("base_url") or None
+    return None, None
+
+
 def _build_browser_config(cfg):
     """Build BROWSER_CONFIG dict from config."""
-    serpapi_key = cfg["api_keys"].get("serpapi") or os.getenv("SERPAPI_API_KEY")
+    serpapi_key = _find_search_provider_key(cfg, "SERPAPI") or os.getenv("SERPAPI_API_KEY")
     return {
         "viewport_size": cfg["browser"]["viewport_size"],
         "downloads_folder": "downloads_folder",
@@ -311,38 +333,37 @@ os.makedirs("./downloads_folder", exist_ok=True)
 
 
 def get_search_tools(cfg):
-    """Get search tools based on config.
+    """Get a search tool based on config.
 
-    Returns a list of search tools with fallback support.
-    engines is a list like ["DDGS"], ["META_SOTA", "DDGS"], etc.
+    Tries providers in list order (first = primary). Falls back to the next
+    provider only if the current one can't be used (e.g. missing API key).
+    SERPAPI is consumed by browser config, not used here.
     """
-    engines = cfg["search"].get("engines", ["DDGS"])
+    search_providers = cfg["search"].get("providers", [{"provider": "DDGS", "key": ""}])
     max_results = cfg["search"]["max_results"]
 
-    # Backward compat: if old "engine" string key exists, convert it
-    if not engines and "engine" in cfg["search"]:
-        engines = [e.strip() for e in cfg["search"]["engine"].split(",")]
+    for entry in search_providers:
+        engine = entry.get("provider", "")
+        key = entry.get("key", "")
 
-    tools = []
-    for engine in engines:
         if engine == "DDGS":
             emit_event("info", content="Using DuckDuckGo search engine")
-            tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
+            return [DuckDuckGoSearchToolLabeled(max_results=max_results)]
         elif engine == "META_SOTA":
-            api_key = cfg["api_keys"].get("meta_sota") or os.getenv("META_SOTA_API_KEY")
+            api_key = key or os.getenv("META_SOTA_API_KEY")
             if not api_key:
-                emit_event("info", content="META_SOTA_API_KEY not found, skipping MetaSo search")
+                emit_event("info", content="META_SOTA API key not configured, trying next provider")
                 continue
             emit_event("info", content="Using MetaSo search engine")
-            tools.append(MetaSotaSearchTool(api_key=api_key, max_results=max_results))
+            return [MetaSotaSearchTool(api_key=api_key, max_results=max_results)]
+        elif engine == "SERPAPI":
+            # SERPAPI is used via browser config, not as a standalone search tool
+            continue
         else:
-            emit_event("info", content=f"Unknown search engine: {engine}, skipping")
+            emit_event("info", content=f"Unknown search engine: {engine}, trying next provider")
 
-    if not tools:
-        emit_event("info", content="No valid search engines configured, falling back to DuckDuckGo")
-        tools.append(DuckDuckGoSearchToolLabeled(max_results=max_results))
-
-    return tools
+    emit_event("info", content="No usable search provider found, falling back to DuckDuckGo")
+    return [DuckDuckGoSearchToolLabeled(max_results=max_results)]
 
 
 def create_agent(cfg):
@@ -350,20 +371,19 @@ def create_agent(cfg):
     model_id = cfg["model"]["default_model_id"]
     agent_cfg = cfg["agent"]
 
-    # Set API keys in environment for LiteLLM (client keys override server keys)
-    for env_key, cfg_key in [
-        ("OPENAI_API_KEY", "openai"),
-        ("DEEPSEEK_API_KEY", "deepseek"),
-    ]:
-        key_val = cfg["api_keys"].get(cfg_key)
-        if key_val:
-            os.environ[env_key] = key_val
+    # Find matching provider for this model's api_key and base_url
+    api_key, base_url = _find_model_provider(cfg, model_id)
 
     model_params = {
         "model_id": model_id,
         "custom_role_conversions": custom_role_conversions,
         "max_completion_tokens": cfg["model"]["max_completion_tokens"],
+        "num_retries": 3,
     }
+    if api_key:
+        model_params["api_key"] = api_key
+    if base_url:
+        model_params["api_base"] = base_url
     if model_id == "o1":
         model_params["reasoning_effort"] = cfg["model"]["reasoning_effort"]
     model = LiteLLMModel(**model_params)

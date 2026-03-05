@@ -6,12 +6,10 @@ import {
     getClientConfig, saveClientConfig,
 } from '../state.js';
 
-const API_KEY_FIELDS = [
-    { key: 'openai', label: 'OpenAI API Key', placeholder: 'sk-...' },
-    { key: 'deepseek', label: 'DeepSeek API Key', placeholder: 'sk-...' },
-    { key: 'serpapi', label: 'SerpAPI Key', placeholder: '' },
-    { key: 'meta_sota', label: 'MetaSo API Key', placeholder: '' },
-    { key: 'hf_token', label: 'HuggingFace Token', placeholder: 'hf_...' },
+const SEARCH_PROVIDER_DEFS = [
+    { id: 'DDGS', label: 'DuckDuckGo', needsKey: false },
+    { id: 'SERPAPI', label: 'SerpAPI', needsKey: true },
+    { id: 'META_SOTA', label: 'MetaSo', needsKey: true },
 ];
 
 const RUN_MODE_OPTIONS = [
@@ -20,31 +18,18 @@ const RUN_MODE_OPTIONS = [
     { value: 'live', label: 'Live (leave = stop)' },
 ];
 
-const SEARCH_ENGINES = [
-    { id: 'DDGS', label: 'DuckDuckGo' },
-    { id: 'META_SOTA', label: 'MetaSo' },
-];
-
-function getClientApiKeys() {
-    const keys = {};
-    for (const f of API_KEY_FIELDS) {
-        keys[f.key] = localStorage.getItem(`odr-apikey-${f.key}`) || '';
-    }
-    return keys;
-}
-
-function ApiKeyInput({ field, value, onChange }) {
+function SecretInput({ label, value, placeholder, onChange }) {
     const [visible, setVisible] = useState(false);
 
     return html`
         <div class="settings-field">
-            <label>${field.label}</label>
+            <label>${label}</label>
             <div class="settings-key-input">
                 <input
                     type=${visible ? 'text' : 'password'}
                     value=${value}
-                    placeholder=${field.placeholder || 'Enter key...'}
-                    onInput=${(e) => onChange(field.key, e.target.value)}
+                    placeholder=${placeholder || 'Enter key...'}
+                    onInput=${(e) => onChange(e.target.value)}
                     autocomplete="off"
                     spellcheck="false"
                 />
@@ -76,43 +61,6 @@ function NumberInput({ label, value, onChange, min, max, step }) {
     `;
 }
 
-function EngineCheckboxes({ selected, onChange }) {
-    const current = selected || [];
-
-    function toggle(id) {
-        const next = current.includes(id)
-            ? current.filter(e => e !== id)
-            : [...current, id];
-        onChange(next.length > 0 ? next : undefined);
-    }
-
-    function getTag(id) {
-        const idx = current.indexOf(id);
-        if (idx < 0) return '';
-        if (idx === 0) return ' (primary)';
-        return ` (fallback #${idx})`;
-    }
-
-    return html`
-        <div class="settings-field">
-            <label>Search Engines</label>
-            <p class="settings-hint">First selected engine is primary. Others are used as fallback in order.</p>
-            <div class="settings-checkbox-group">
-                ${SEARCH_ENGINES.map(eng => html`
-                    <label class="settings-checkbox" key=${eng.id}>
-                        <input
-                            type="checkbox"
-                            checked=${current.includes(eng.id)}
-                            onChange=${() => toggle(eng.id)}
-                        />
-                        ${eng.label}${getTag(eng.id)}
-                    </label>
-                `)}
-            </div>
-        </div>
-    `;
-}
-
 /** Optional override input — shows placeholder with server default, empty = use server value */
 function OverrideNumberInput({ label, value, onChange, placeholder, min, max }) {
     return html`
@@ -134,30 +82,133 @@ function OverrideNumberInput({ label, value, onChange, placeholder, min, max }) 
     `;
 }
 
+/** Editable list of model providers (provider name, api_key, base_url) */
+function ModelProvidersList({ providers, onChange }) {
+    const list = providers || [];
+
+    function updateProvider(index, field, value) {
+        const next = list.map((p, i) => i === index ? { ...p, [field]: value } : p);
+        onChange(next);
+    }
+
+    function removeProvider(index) {
+        onChange(list.filter((_, i) => i !== index));
+    }
+
+    function addProvider() {
+        onChange([...list, { provider: '', api_key: '', base_url: '' }]);
+    }
+
+    return html`
+        ${list.map((p, i) => html`
+            <div class="settings-provider-block" key=${i}>
+                <div class="settings-provider-header">
+                    <div class="settings-field" style="flex:1">
+                        <label>Provider Name</label>
+                        <input
+                            type="text"
+                            value=${p.provider}
+                            placeholder="e.g. openai, deepseek, anthropic"
+                            onInput=${(e) => updateProvider(i, 'provider', e.target.value)}
+                            style="width: 100%"
+                        />
+                    </div>
+                    <button
+                        class="btn btn-ghost btn-sm"
+                        onClick=${() => removeProvider(i)}
+                        title="Remove provider"
+                        style="margin-top: 1.4em"
+                    >\u2715</button>
+                </div>
+                <${SecretInput}
+                    label="API Key"
+                    value=${p.api_key || ''}
+                    placeholder="sk-..."
+                    onChange=${(v) => updateProvider(i, 'api_key', v)}
+                />
+                <div class="settings-field">
+                    <label>Base URL</label>
+                    <input
+                        type="text"
+                        value=${p.base_url || ''}
+                        placeholder="Leave empty for default"
+                        onInput=${(e) => updateProvider(i, 'base_url', e.target.value)}
+                        style="width: 100%"
+                    />
+                </div>
+            </div>
+        `)}
+        <button class="btn btn-ghost btn-sm" onClick=${addProvider}>+ Add Provider</button>
+    `;
+}
+
+/** Search providers with checkboxes for enable/order and per-provider key inputs */
+function SearchProvidersList({ providers, onChange }) {
+    const list = providers || [];
+    const activeIds = list.map(p => p.provider);
+
+    function getTag(id) {
+        const idx = activeIds.indexOf(id);
+        if (idx < 0) return '';
+        if (idx === 0) return ' (primary)';
+        return ` (fallback #${idx})`;
+    }
+
+    function toggleProvider(id) {
+        const exists = list.find(p => p.provider === id);
+        if (exists) {
+            const next = list.filter(p => p.provider !== id);
+            onChange(next.length > 0 ? next : undefined);
+        } else {
+            onChange([...list, { provider: id, key: '' }]);
+        }
+    }
+
+    function updateKey(id, value) {
+        const next = list.map(p => p.provider === id ? { ...p, key: value } : p);
+        onChange(next);
+    }
+
+    return html`
+        <div class="settings-field">
+            <label>Search Providers</label>
+            <p class="settings-hint">First selected provider is primary. Others are used as fallback in order.</p>
+            <div class="settings-checkbox-group">
+                ${SEARCH_PROVIDER_DEFS.map(def => html`
+                    <label class="settings-checkbox" key=${def.id}>
+                        <input
+                            type="checkbox"
+                            checked=${activeIds.includes(def.id)}
+                            onChange=${() => toggleProvider(def.id)}
+                        />
+                        ${def.label}${getTag(def.id)}
+                    </label>
+                `)}
+            </div>
+        </div>
+        ${SEARCH_PROVIDER_DEFS.filter(def => def.needsKey && activeIds.includes(def.id)).map(def => {
+            const entry = list.find(p => p.provider === def.id);
+            return html`
+                <${SecretInput}
+                    key=${'search-' + def.id}
+                    label=${def.label + ' API Key'}
+                    value=${entry?.key || ''}
+                    onChange=${(v) => updateKey(def.id, v)}
+                />
+            `;
+        })}
+    `;
+}
+
 function ClientSettings() {
-    const [keys, setKeys] = useState(getClientApiKeys);
     const [overrides, setOverrides] = useState(() => getClientConfig());
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const theme = useStore(s => s.theme);
     const runMode = useStore(s => s.runMode);
 
-    function onKeyChange(key, value) {
-        const next = { ...keys, [key]: value };
-        setKeys(next);
-        if (value) {
-            localStorage.setItem(`odr-apikey-${key}`, value);
-        } else {
-            localStorage.removeItem(`odr-apikey-${key}`);
-        }
-    }
-
-    function clearAllKeys() {
-        const empty = {};
-        for (const f of API_KEY_FIELDS) {
-            empty[f.key] = '';
-            localStorage.removeItem(`odr-apikey-${f.key}`);
-        }
-        setKeys(empty);
+    function updateOverrides(next) {
+        setOverrides(next);
+        saveClientConfig(next);
     }
 
     function updateOverride(section, key, value) {
@@ -169,32 +220,66 @@ function ClientSettings() {
         } else {
             next[section][key] = value;
         }
-        setOverrides(next);
-        saveClientConfig(next);
+        updateOverrides(next);
+    }
+
+    function updateModelProviders(providers) {
+        const next = { ...overrides };
+        if (!next.model) next.model = {};
+        if (providers && providers.length > 0) {
+            next.model.providers = providers;
+        } else {
+            delete next.model.providers;
+            if (Object.keys(next.model).length === 0) delete next.model;
+        }
+        updateOverrides(next);
+    }
+
+    function updateSearchProviders(providers) {
+        const next = { ...overrides };
+        if (!next.search) next.search = {};
+        if (providers && providers.length > 0) {
+            next.search.providers = providers;
+        } else {
+            delete next.search.providers;
+            if (Object.keys(next.search).length === 0) delete next.search;
+        }
+        updateOverrides(next);
     }
 
     function clearOverrides() {
-        setOverrides({});
-        saveClientConfig({});
+        updateOverrides({});
     }
 
     const g = (section, key) => overrides[section]?.[key];
 
     return html`
         <div class="settings-section">
-            <h3>API Keys</h3>
-            <p class="settings-hint">Stored in your browser only. Never sent to the server for storage.</p>
-            ${API_KEY_FIELDS.map(f => html`
-                <${ApiKeyInput}
-                    key=${f.key}
-                    field=${f}
-                    value=${keys[f.key]}
-                    onChange=${onKeyChange}
-                />
-            `)}
-            <button class="btn btn-ghost btn-sm" onClick=${clearAllKeys}>
-                Clear all keys
-            </button>
+            <h3>Model Providers</h3>
+            <p class="settings-hint">Stored in your browser only. Provider name must match the model ID prefix (e.g. "deepseek" for "deepseek/deepseek-chat", "openai" for GPT models).</p>
+            <${ModelProvidersList}
+                providers=${overrides.model?.providers}
+                onChange=${updateModelProviders}
+            />
+        </div>
+
+        <div class="settings-section">
+            <h3>Search Providers</h3>
+            <p class="settings-hint">Stored in your browser only.</p>
+            <${SearchProvidersList}
+                providers=${overrides.search?.providers}
+                onChange=${updateSearchProviders}
+            />
+        </div>
+
+        <div class="settings-section">
+            <h3>Other Keys</h3>
+            <${SecretInput}
+                label="HuggingFace Token"
+                value=${g('other_keys', 'hf_token') || ''}
+                placeholder="hf_..."
+                onChange=${(v) => updateOverride('other_keys', 'hf_token', v)}
+            />
         </div>
 
         <div class="settings-section">
@@ -263,10 +348,6 @@ function ClientSettings() {
                     </div>
 
                     <h4>Search</h4>
-                    <${EngineCheckboxes}
-                        selected=${g('search', 'engines')}
-                        onChange=${(v) => updateOverride('search', 'engines', v)}
-                    />
                     <${OverrideNumberInput} label="Max Results"
                         value=${g('search', 'max_results')}
                         onChange=${(v) => updateOverride('search', 'max_results', v)}
@@ -371,13 +452,6 @@ function ServerConfigEditor({ password }) {
         });
     }
 
-    function updateApiKey(key, value) {
-        setConfig({
-            ...config,
-            api_keys: { ...config.api_keys, [key]: value },
-        });
-    }
-
     function addModel() {
         if (!newModel.id || !newModel.name) return;
         setConfig({
@@ -457,18 +531,41 @@ function ServerConfigEditor({ password }) {
         </div>
 
         <div class="settings-section">
+            <h3>Model Providers</h3>
+            <p class="settings-hint">Shared provider keys. Masked values shown — enter new value to replace.</p>
+            <${ModelProvidersList}
+                providers=${config.model?.providers || []}
+                onChange=${(v) => update('model', 'providers', v)}
+            />
+        </div>
+
+        <div class="settings-section">
             <h3>Search</h3>
-            <${EngineCheckboxes}
-                selected=${config.search.engines || ['DDGS']}
+            <${SearchProvidersList}
+                providers=${config.search?.providers || []}
                 onChange=${(v) => setConfig({
                     ...config,
-                    search: { ...config.search, engines: v || ['DDGS'] },
+                    search: { ...config.search, providers: v || [] },
                 })}
             />
             <${NumberInput} label="Max Results"
                 value=${config.search.max_results}
                 onChange=${(v) => update('search', 'max_results', v)}
                 min=${1} max=${50} />
+        </div>
+
+        <div class="settings-section">
+            <h3>Other Keys</h3>
+            <p class="settings-hint">Masked values shown — enter new value to replace.</p>
+            <${SecretInput}
+                label="HuggingFace Token"
+                value=${config.other_keys?.hf_token || ''}
+                placeholder="hf_..."
+                onChange=${(v) => setConfig({
+                    ...config,
+                    other_keys: { ...config.other_keys, hf_token: v },
+                })}
+            />
         </div>
 
         <div class="settings-section">
@@ -493,19 +590,6 @@ function ServerConfigEditor({ password }) {
                 value=${config.limits.max_field_length}
                 onChange=${(v) => update('limits', 'max_field_length', v)}
                 min=${1000} max=${200000} />
-        </div>
-
-        <div class="settings-section">
-            <h3>Server API Keys</h3>
-            <p class="settings-hint">Shared keys for all users. Masked values shown — enter new value to replace.</p>
-            ${API_KEY_FIELDS.map(f => html`
-                <${ApiKeyInput}
-                    key=${'srv-' + f.key}
-                    field=${f}
-                    value=${config.api_keys[f.key] || ''}
-                    onChange=${(k, v) => updateApiKey(k, v)}
-                />
-            `)}
         </div>
 
         <div class="settings-section">
