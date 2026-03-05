@@ -1577,6 +1577,20 @@ footer p {
     margin-bottom: var(--sp-2);
 }
 
+.settings-provider-block {
+    border: 1px solid var(--border);
+    border-radius: var(--rad);
+    padding: var(--sp-2);
+    margin-bottom: var(--sp-2);
+    background: var(--surface-2);
+}
+
+.settings-provider-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-1);
+}
+
 .settings-model-item {
     display: flex;
     align-items: center;

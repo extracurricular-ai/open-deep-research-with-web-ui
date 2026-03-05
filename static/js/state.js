@@ -504,7 +504,6 @@ export async function startStream() {
     const model = state.selectedModel;
     const mode = state.runMode;
 
-    const apiKeys = getClientApiKeys();
     const clientConfig = getClientConfig();
 
     if (mode === 'auto-kill') {
@@ -517,7 +516,7 @@ export async function startStream() {
             const response = await fetch('/api/run/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys, client_config: clientConfig }),
+                body: JSON.stringify({ question: q, model_id: model, run_mode: mode, client_config: clientConfig }),
             });
 
             if (!response.ok) {
@@ -621,7 +620,7 @@ export async function startStream() {
         const response = await fetch('/api/run/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: q, model_id: model, run_mode: mode, api_keys: apiKeys, client_config: clientConfig }),
+            body: JSON.stringify({ question: q, model_id: model, run_mode: mode, client_config: clientConfig }),
         });
 
         if (!response.ok) {
@@ -957,16 +956,41 @@ export async function saveServerConfig(config, password) {
     }
 }
 
-/** Read client API keys from localStorage */
-export function getClientApiKeys() {
-    const keys = {};
-    const keyNames = ['openai', 'deepseek', 'serpapi', 'meta_sota', 'hf_token'];
-    for (const k of keyNames) {
+/** Migrate old flat odr-apikey-* localStorage items into odr-client-config structure. */
+function migrateOldApiKeys() {
+    const oldKeyNames = ['openai', 'deepseek', 'serpapi', 'meta_sota', 'hf_token'];
+    const hasOld = oldKeyNames.some(k => localStorage.getItem(`odr-apikey-${k}`));
+    if (!hasOld) return;
+
+    const config = getClientConfig();
+    for (const k of oldKeyNames) {
         const val = localStorage.getItem(`odr-apikey-${k}`);
-        if (val) keys[k] = val;
+        if (!val) continue;
+
+        if (k === 'openai' || k === 'deepseek') {
+            if (!config.model) config.model = {};
+            if (!config.model.providers) config.model.providers = [];
+            const existing = config.model.providers.find(p => p.provider === k);
+            if (existing) { existing.api_key = val; }
+            else { config.model.providers.push({ provider: k, api_key: val, base_url: '' }); }
+        } else if (k === 'serpapi' || k === 'meta_sota') {
+            if (!config.search) config.search = {};
+            if (!config.search.providers) config.search.providers = [];
+            const providerName = k === 'serpapi' ? 'SERPAPI' : 'META_SOTA';
+            const existing = config.search.providers.find(p => p.provider === providerName);
+            if (existing) { existing.key = val; }
+            else { config.search.providers.push({ provider: providerName, key: val }); }
+        } else if (k === 'hf_token') {
+            if (!config.other_keys) config.other_keys = {};
+            config.other_keys.hf_token = val;
+        }
+        localStorage.removeItem(`odr-apikey-${k}`);
     }
-    return keys;
+    saveClientConfig(config);
 }
+
+// Run migration on load
+migrateOldApiKeys();
 
 /** Read all client config overrides from localStorage.
  *  Only returns non-empty values so server defaults are preserved. */
