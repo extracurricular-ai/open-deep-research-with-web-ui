@@ -2,7 +2,7 @@ import { html } from '../htm.js';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import {
     useStore, setState,
-    startStream, stopStream, newSession, setRunMode,
+    startStream, stopStream, newSession, setRunMode, discoverModels,
 } from '../state.js';
 import { StatusBar } from './StatusBar.js';
 
@@ -93,16 +93,43 @@ export function InputPanel() {
             `}
             <form onSubmit=${onSubmit}>
                 <div class="form-group">
-                    <label for="modelSelect">Model</label>
+                    <div class="model-select-label-row">
+                        <label for="modelSelect">Model</label>
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-sm model-discover-btn"
+                            onClick=${discoverModels}
+                            disabled=${store.discoveringModels}
+                            title="Query provider APIs to list available models"
+                        >
+                            ${store.discoveringModels ? 'Refreshing...' : 'Refresh Models'}
+                        </button>
+                    </div>
                     <select
                         id="modelSelect"
                         value=${store.selectedModel}
                         onChange=${(e) => setState({ selectedModel: e.target.value })}
                     >
-                        ${store.models.map(m => html`
-                            <option value=${m.id} title=${m.description || ''}>${m.name}</option>
-                        `)}
+                        ${store.discoveredModels.length > 0 && html`
+                            <optgroup label="Discovered">
+                                ${store.discoveredModels.map(m => html`
+                                    <option value=${m.id}>${m.id}</option>
+                                `)}
+                            </optgroup>
+                        `}
+                        ${store.models.length > 0 && html`
+                            <optgroup label="Configured">
+                                ${store.models.map(m => html`
+                                    <option value=${m.id} title=${m.description || ''}>${m.name}</option>
+                                `)}
+                            </optgroup>
+                        `}
                     </select>
+                    ${store.discoverErrors.length > 0 && html`
+                        <p class="model-discover-errors">
+                            ${store.discoverErrors.map(e => html`<span>${e}</span>`)}
+                        </p>
+                    `}
                 </div>
 
                 <div class="form-group">

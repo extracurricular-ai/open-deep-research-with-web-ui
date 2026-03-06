@@ -19,6 +19,9 @@ const state = {
     activeFilter: 'all',
     historyOpen: false,
     models: [],
+    discoveredModels: [],    // auto-discovered from provider APIs
+    discoveringModels: false,
+    discoverErrors: [],
     selectedModel: '',
     question: '',
     finalAnswer: null,
@@ -297,6 +300,39 @@ export async function loadModels() {
             models: [{ id: 'o1', name: 'OpenAI o1', description: 'Advanced reasoning' }],
             selectedModel: state.selectedModel || 'o1',
         });
+    }
+}
+
+/**
+ * Query provider APIs to discover available models.
+ * Sends client-side provider configs (api keys, base_urls) to the backend
+ * which performs the actual HTTP calls to provider endpoints.
+ */
+export async function discoverModels() {
+    setState({ discoveringModels: true, discoverErrors: [] });
+    try {
+        const clientConfig = getClientConfig();
+        const providers = clientConfig.model?.providers || [];
+        const response = await fetch('/api/models/discover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ providers }),
+        });
+        if (!response.ok) throw new Error('Discovery request failed');
+        const data = await response.json();
+        const discovered = data.discovered || [];
+        setState({
+            discoveredModels: discovered,
+            discoverErrors: data.errors || [],
+            discoveringModels: false,
+        });
+        // If nothing was selected yet, pick first discovered
+        if (!state.selectedModel && discovered.length > 0) {
+            setState({ selectedModel: discovered[0].id });
+        }
+    } catch (e) {
+        console.error('Model discovery failed:', e);
+        setState({ discoveringModels: false, discoverErrors: [e.message] });
     }
 }
 
@@ -781,6 +817,8 @@ export async function loadSessions() {
 export async function loadSession(sessionId) {
     if (state.activeSessionId === sessionId) return;
 
+    discoverModels();
+
     // If it's an auto-kill session we already have in memory — instant switch
     if (liveSessions[sessionId]) {
         switchToLiveSession(sessionId);
@@ -896,6 +934,7 @@ export async function newSession() {
     // For auto-kill: existing sessions keep streaming in background, just clear the view
     resetView();
     setState({ question: '', activeSessionId: null, viewingHistory: false });
+    discoverModels();
 }
 
 export function toggleSidebar() {

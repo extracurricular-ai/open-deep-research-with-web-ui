@@ -447,6 +447,98 @@ def get_models():
     return jsonify(cfg.get("models", []))
 
 
+@app.route("/api/models/discover", methods=["POST"])
+def discover_models():
+    """Discover available models from configured providers.
+
+    Accepts optional client-supplied providers list in request body:
+      { "providers": [{"provider": "openai", "api_key": "sk-...", "base_url": ""},  ...] }
+
+    Merges client providers with server config providers (client takes precedence).
+    Queries:
+      - OpenAI-compatible /v1/models for: openai, deepseek, and any provider with base_url
+      - Ollama /api/tags for: ollama provider
+
+    Returns:
+      { "discovered": [{"id": "...", "provider": "..."}], "errors": [...] }
+    """
+    import urllib.request
+    import urllib.error
+
+    data = request.json or {}
+    client_providers = data.get("providers", [])
+
+    # Build merged provider map: server config as base, client overrides on top
+    server_cfg = load_config()
+    server_providers = server_cfg.get("model", {}).get("providers", [])
+
+    # Index by provider name (case-insensitive)
+    merged = {}
+    for p in server_providers:
+        key = p.get("provider", "").lower()
+        if key:
+            merged[key] = dict(p)
+    for p in client_providers:
+        key = p.get("provider", "").lower()
+        if key:
+            existing = merged.get(key, {})
+            merged[key] = {**existing, **{k: v for k, v in p.items() if v}}
+
+    discovered = []
+    errors = []
+
+    OPENAI_COMPATIBLE = {"openai", "deepseek"}
+
+    for provider_key, pinfo in merged.items():
+        api_key = pinfo.get("api_key", "")
+        base_url = (pinfo.get("base_url") or "").rstrip("/")
+
+        if provider_key == "ollama":
+            # Ollama uses /api/tags
+            url = (base_url or "http://localhost:11434") + "/api/tags"
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "ODR/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    body = json.loads(resp.read())
+                models_list = body.get("models", [])
+                for m in models_list:
+                    name = m.get("name") or m.get("model", "")
+                    if name:
+                        discovered.append({"id": f"ollama/{name}", "provider": "ollama"})
+            except Exception as e:
+                errors.append(f"ollama: {str(e)}")
+
+        elif provider_key in OPENAI_COMPATIBLE or base_url:
+            # OpenAI-compatible /v1/models
+            if not api_key and not base_url:
+                continue  # No credentials, skip
+            endpoint_base = base_url if base_url else {
+                "openai": "https://api.openai.com",
+                "deepseek": "https://api.deepseek.com",
+            }.get(provider_key, "")
+            if not endpoint_base:
+                continue
+            url = endpoint_base + "/v1/models"
+            headers = {"User-Agent": "ODR/1.0"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    body = json.loads(resp.read())
+                models_list = body.get("data", [])
+                for m in models_list:
+                    model_id = m.get("id", "")
+                    if model_id:
+                        # Prefix non-openai providers
+                        full_id = model_id if provider_key == "openai" else f"{provider_key}/{model_id}"
+                        discovered.append({"id": full_id, "provider": provider_key})
+            except Exception as e:
+                errors.append(f"{provider_key}: {str(e)}")
+
+    return jsonify({"discovered": discovered, "errors": errors})
+
+
 # ===== Config API =====
 
 def _mask_api_key(key):

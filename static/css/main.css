@@ -232,6 +232,31 @@ header {
     margin-bottom: var(--sp-1);
 }
 
+.model-select-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-1);
+}
+
+.model-select-label-row label {
+    margin-bottom: 0;
+}
+
+.model-discover-btn {
+    font-size: var(--fs-xs);
+    padding: 2px 8px;
+}
+
+.model-discover-errors {
+    margin-top: var(--sp-1);
+    font-size: var(--fs-xs);
+    color: var(--error);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
 select,
 textarea {
     width: 100%;

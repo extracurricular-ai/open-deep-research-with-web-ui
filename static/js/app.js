@@ -8,7 +8,7 @@ import { html } from './htm.js';
 import {
     getState, setState, useStore,
     loadModels, loadSessions, loadConfigMeta, handlePageVisible, handlePageUnload,
-    startStream, stopStream, resetView, toggleSidebar,
+    startStream, stopStream, resetView, toggleSidebar, discoverModels,
 } from './state.js';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
@@ -29,6 +29,7 @@ function App() {
         loadModels();
         loadSessions();
         loadConfigMeta();
+        discoverModels();
     }, []);
 
     // Refresh state when tab becomes visible (bfcache restore, tab switch back)

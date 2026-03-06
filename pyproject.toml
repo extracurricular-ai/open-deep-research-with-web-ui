@@ -46,6 +46,7 @@ dependencies = [
     "SpeechRecognition>=3.10.0",
     "ffmpeg>=1.4",
     "litellm>=1.0.0",
+    "tenacity>=8.0.0",
     "ddgs>=3.9.0",
     "flask>=2.3.0",
     "flask-cors>=4.0.0",
