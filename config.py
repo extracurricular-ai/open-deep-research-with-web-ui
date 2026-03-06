@@ -33,6 +33,7 @@ DEFAULTS = {
         # Order matters: first provider is primary, rest are tried as fallbacks in list order.
         "providers": [
             {"provider": "DDGS", "key": ""},
+            {"provider": "TAVILY", "key": ""},
             {"provider": "SERPAPI", "key": ""},
             {"provider": "META_SOTA", "key": ""},
         ],
