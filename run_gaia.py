@@ -35,8 +35,52 @@ from smolagents import (
     GoogleSearchTool,
     LiteLLMModel,
     Model,
+    Tool,
     ToolCallingAgent,
 )
+
+
+class TavilySearchTool(Tool):
+    name = "web_search_tavily"
+    description = "Search the web using Tavily search engine. Returns search results with title, link, and snippet."
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "The search query to look up on the web",
+        }
+    }
+    output_type = "string"
+
+    def __init__(self, api_key: str, max_results: int = 10, **kwargs):
+        super().__init__(**kwargs)
+        from tavily import TavilyClient
+
+        self.client = TavilyClient(api_key=api_key)
+        self.max_results = max_results
+
+    def forward(self, query: str) -> str:
+        """Search the web using Tavily API"""
+        try:
+            response = self.client.search(
+                query=query,
+                max_results=self.max_results,
+                search_depth="basic",
+            )
+            results_list = response.get("results", [])
+            if not results_list:
+                return "No results found."
+
+            results = []
+            for item in results_list:
+                title = item.get("title", "No title")
+                url = item.get("url", "")
+                snippet = item.get("content", "No description")
+                results.append(f"|{title}]({url})\n{snippet}\n")
+
+            return "## Search Results (Tavily)\n\n" + "\n".join(results)
+
+        except Exception as e:
+            return f"Error performing Tavily search: {str(e)}"
 
 
 load_dotenv(override=True)
@@ -94,6 +138,11 @@ def create_agent_team(model: Model):
         ArchiveSearchTool(browser),
         TextInspectorTool(model, text_limit),
     ]
+
+    # Add Tavily search tool if API key is available (additive — both Serper and Tavily)
+    tavily_api_key = os.getenv("TAVILY_API_KEY")
+    if tavily_api_key:
+        WEB_TOOLS.insert(1, TavilySearchTool(api_key=tavily_api_key))
 
     text_webbrowser_agent = ToolCallingAgent(
         model=model,
