@@ -215,6 +215,49 @@ class DuckDuckGoSearchToolLabeled(DuckDuckGoSearchTool):
         return result.replace("## Search Results\n\n", "## Search Results (DuckDuckGo)\n\n", 1)
 
 
+class TavilySearchTool(Tool):
+    name = "web_search"
+    description = "Search the web using Tavily search engine. Returns search results with title, link, and snippet."
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "The search query to look up on the web",
+        }
+    }
+    output_type = "string"
+
+    def __init__(self, api_key: str, max_results: int = 10, **kwargs):
+        super().__init__(**kwargs)
+        from tavily import TavilyClient
+        self.client = TavilyClient(api_key=api_key)
+        self.max_results = max_results
+
+    def forward(self, query: str) -> str:
+        """Search the web using Tavily API"""
+        try:
+            response = self.client.search(
+                query=query,
+                max_results=self.max_results,
+                search_depth="basic",
+            )
+
+            results_list = response.get("results", [])
+            if not results_list:
+                return "No results found."
+
+            results = []
+            for item in results_list[:self.max_results]:
+                title = item.get("title", "No title")
+                url = item.get("url", "")
+                snippet = item.get("content", "No description")
+                results.append(f"|{title}]({url})\n{snippet}\n")
+
+            return "## Search Results (Tavily)\n\n" + "\n".join(results)
+
+        except Exception as e:
+            return f"Error performing search: {str(e)}"
+
+
 class MetaSotaSearchTool(Tool):
     name = "web_search"
     description = "Search the web using MetaSo search engine. Returns search results with title, link, and snippet."
@@ -349,6 +392,13 @@ def get_search_tools(cfg):
         if engine == "DDGS":
             emit_event("info", content="Using DuckDuckGo search engine")
             return [DuckDuckGoSearchToolLabeled(max_results=max_results)]
+        elif engine == "TAVILY":
+            api_key = key or os.getenv("TAVILY_API_KEY")
+            if not api_key:
+                emit_event("info", content="TAVILY API key not configured, trying next provider")
+                continue
+            emit_event("info", content="Using Tavily search engine")
+            return [TavilySearchTool(api_key=api_key, max_results=max_results)]
         elif engine == "META_SOTA":
             api_key = key or os.getenv("META_SOTA_API_KEY")
             if not api_key:
