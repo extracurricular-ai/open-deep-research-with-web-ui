@@ -1,7 +1,7 @@
 import { html } from '../htm.js';
 import { useState, useEffect } from 'preact/hooks';
 import {
-    useStore, setState, toggleSettings, toggleTheme, setRunMode,
+    useStore, toggleSettings, toggleTheme, setRunMode,
     verifyAdminPassword, loadServerConfig, saveServerConfig,
     getClientConfig, saveClientConfig,
 } from '../state.js';
@@ -12,11 +12,28 @@ const SEARCH_PROVIDER_DEFS = [
     { id: 'META_SOTA', label: 'MetaSo', needsKey: true },
 ];
 
+// Well-known providers that use standard endpoints (no custom base URL needed)
+const KNOWN_PROVIDERS = [
+    'openai', 'anthropic', 'deepseek', 'ollama', 'azure', 'groq',
+    'together', 'mistral', 'cohere', 'gemini', 'google', 'bedrock',
+    'vertex', 'huggingface', 'replicate', 'fireworks', 'perplexity',
+];
+
+// Providers whose default base URL is well-known — no need to fill it in
+const DEFAULT_ENDPOINT_PROVIDERS = new Set([
+    'openai', 'anthropic', 'deepseek', 'groq', 'mistral', 'cohere',
+    'gemini', 'google', 'together', 'fireworks', 'perplexity',
+]);
+
 const RUN_MODE_OPTIONS = [
     { value: 'background', label: 'Background (persistent)' },
     { value: 'auto-kill', label: 'Background (auto-kill)' },
     { value: 'live', label: 'Live (leave = stop)' },
 ];
+
+// ---------------------------------------------------------------------------
+// Primitive input components
+// ---------------------------------------------------------------------------
 
 function SecretInput({ label, value, placeholder, onChange }) {
     const [visible, setVisible] = useState(false);
@@ -61,7 +78,6 @@ function NumberInput({ label, value, onChange, min, max, step }) {
     `;
 }
 
-/** Optional override input — shows placeholder with server default, empty = use server value */
 function OverrideNumberInput({ label, value, onChange, placeholder, min, max }) {
     return html`
         <div class="settings-field">
@@ -82,67 +98,74 @@ function OverrideNumberInput({ label, value, onChange, placeholder, min, max }) 
     `;
 }
 
-/** Editable list of model providers (provider name, api_key, base_url) */
+// ---------------------------------------------------------------------------
+// Shared list sub-components
+// ---------------------------------------------------------------------------
+
 function ModelProvidersList({ providers, onChange }) {
     const list = providers || [];
+    const listId = 'provider-names-datalist';
 
     function updateProvider(index, field, value) {
-        const next = list.map((p, i) => i === index ? { ...p, [field]: value } : p);
-        onChange(next);
-    }
-
-    function removeProvider(index) {
-        onChange(list.filter((_, i) => i !== index));
-    }
-
-    function addProvider() {
-        onChange([...list, { provider: '', api_key: '', base_url: '' }]);
+        onChange(list.map((p, i) => i === index ? { ...p, [field]: value } : p));
     }
 
     return html`
-        ${list.map((p, i) => html`
-            <div class="settings-provider-block" key=${i}>
-                <div class="settings-provider-header">
-                    <div class="settings-field" style="flex:1">
-                        <label>Provider Name</label>
+        <datalist id=${listId}>
+            ${KNOWN_PROVIDERS.map(name => html`<option value=${name} key=${name} />`)}
+        </datalist>
+        ${list.map((p, i) => {
+            const isKnown = DEFAULT_ENDPOINT_PROVIDERS.has((p.provider || '').toLowerCase());
+            return html`
+                <div class="settings-provider-block" key=${i}>
+                    <div class="settings-provider-header">
+                        <div class="settings-field" style="flex:1">
+                            <label>Provider Name</label>
+                            <input
+                                type="text"
+                                class="settings-text-input"
+                                list=${listId}
+                                value=${p.provider}
+                                placeholder="e.g. openai, deepseek, anthropic"
+                                onInput=${(e) => updateProvider(i, 'provider', e.target.value)}
+                            />
+                        </div>
+                        <button
+                            class="btn btn-ghost btn-sm"
+                            onClick=${() => onChange(list.filter((_, j) => j !== i))}
+                            title="Remove provider"
+                            style="margin-top: 1.4em"
+                        >\u2715</button>
+                    </div>
+                    <${SecretInput}
+                        label="API Key"
+                        value=${p.api_key || ''}
+                        placeholder="sk-..."
+                        onChange=${(v) => updateProvider(i, 'api_key', v)}
+                    />
+                    <div class="settings-field">
+                        <label>
+                            Base URL
+                            ${isKnown ? html`<span class="settings-field-note">(not required for ${p.provider})</span>` : ''}
+                        </label>
                         <input
                             type="text"
-                            value=${p.provider}
-                            placeholder="e.g. openai, deepseek, anthropic"
-                            onInput=${(e) => updateProvider(i, 'provider', e.target.value)}
-                            style="width: 100%"
+                            class="settings-text-input"
+                            value=${p.base_url || ''}
+                            placeholder=${isKnown ? `Uses ${p.provider} default endpoint` : 'https://api.example.com/v1'}
+                            onInput=${(e) => updateProvider(i, 'base_url', e.target.value)}
                         />
                     </div>
-                    <button
-                        class="btn btn-ghost btn-sm"
-                        onClick=${() => removeProvider(i)}
-                        title="Remove provider"
-                        style="margin-top: 1.4em"
-                    >\u2715</button>
                 </div>
-                <${SecretInput}
-                    label="API Key"
-                    value=${p.api_key || ''}
-                    placeholder="sk-..."
-                    onChange=${(v) => updateProvider(i, 'api_key', v)}
-                />
-                <div class="settings-field">
-                    <label>Base URL</label>
-                    <input
-                        type="text"
-                        value=${p.base_url || ''}
-                        placeholder="Leave empty for default"
-                        onInput=${(e) => updateProvider(i, 'base_url', e.target.value)}
-                        style="width: 100%"
-                    />
-                </div>
-            </div>
-        `)}
-        <button class="btn btn-ghost btn-sm" onClick=${addProvider}>+ Add Provider</button>
+            `;
+        })}
+        <button
+            class="btn btn-ghost btn-sm"
+            onClick=${() => onChange([...list, { provider: '', api_key: '', base_url: '' }])}
+        >+ Add Provider</button>
     `;
 }
 
-/** Search providers with checkboxes for enable/order and per-provider key inputs */
 function SearchProvidersList({ providers, onChange }) {
     const list = providers || [];
     const activeIds = list.map(p => p.provider);
@@ -165,8 +188,7 @@ function SearchProvidersList({ providers, onChange }) {
     }
 
     function updateKey(id, value) {
-        const next = list.map(p => p.provider === id ? { ...p, key: value } : p);
-        onChange(next);
+        onChange(list.map(p => p.provider === id ? { ...p, key: value } : p));
     }
 
     return html`
@@ -200,19 +222,17 @@ function SearchProvidersList({ providers, onChange }) {
     `;
 }
 
-function ClientSettings() {
-    const [overrides, setOverrides] = useState(() => getClientConfig());
+// ---------------------------------------------------------------------------
+// Pure form components — no internal save state, no footer rendering
+// ---------------------------------------------------------------------------
+
+function ClientSettingsForm({ draft, onChange }) {
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const theme = useStore(s => s.theme);
     const runMode = useStore(s => s.runMode);
 
-    function updateOverrides(next) {
-        setOverrides(next);
-        saveClientConfig(next);
-    }
-
     function updateOverride(section, key, value) {
-        const next = { ...overrides };
+        const next = { ...draft };
         if (!next[section]) next[section] = {};
         if (value === undefined || value === '') {
             delete next[section][key];
@@ -220,11 +240,11 @@ function ClientSettings() {
         } else {
             next[section][key] = value;
         }
-        updateOverrides(next);
+        onChange(next);
     }
 
     function updateModelProviders(providers) {
-        const next = { ...overrides };
+        const next = { ...draft };
         if (!next.model) next.model = {};
         if (providers && providers.length > 0) {
             next.model.providers = providers;
@@ -232,11 +252,11 @@ function ClientSettings() {
             delete next.model.providers;
             if (Object.keys(next.model).length === 0) delete next.model;
         }
-        updateOverrides(next);
+        onChange(next);
     }
 
     function updateSearchProviders(providers) {
-        const next = { ...overrides };
+        const next = { ...draft };
         if (!next.search) next.search = {};
         if (providers && providers.length > 0) {
             next.search.providers = providers;
@@ -244,21 +264,17 @@ function ClientSettings() {
             delete next.search.providers;
             if (Object.keys(next.search).length === 0) delete next.search;
         }
-        updateOverrides(next);
+        onChange(next);
     }
 
-    function clearOverrides() {
-        updateOverrides({});
-    }
-
-    const g = (section, key) => overrides[section]?.[key];
+    const g = (section, key) => draft[section]?.[key];
 
     return html`
         <div class="settings-section">
             <h3>Model Providers</h3>
             <p class="settings-hint">Stored in your browser only. Provider name must match the model ID prefix (e.g. "deepseek" for "deepseek/deepseek-chat", "openai" for GPT models).</p>
             <${ModelProvidersList}
-                providers=${overrides.model?.providers}
+                providers=${draft.model?.providers}
                 onChange=${updateModelProviders}
             />
         </div>
@@ -267,7 +283,7 @@ function ClientSettings() {
             <h3>Search Providers</h3>
             <p class="settings-hint">Stored in your browser only.</p>
             <${SearchProvidersList}
-                providers=${overrides.search?.providers}
+                providers=${draft.search?.providers}
                 onChange=${updateSearchProviders}
             />
         </div>
@@ -293,10 +309,7 @@ function ClientSettings() {
             </div>
             <div class="settings-field">
                 <label>Default Run Mode</label>
-                <select
-                    value=${runMode}
-                    onChange=${(e) => setRunMode(e.target.value)}
-                >
+                <select value=${runMode} onChange=${(e) => setRunMode(e.target.value)}>
                     ${RUN_MODE_OPTIONS.map(opt => html`
                         <option value=${opt.value}>${opt.label}</option>
                     `)}
@@ -373,7 +386,7 @@ function ClientSettings() {
                         onChange=${(v) => updateOverride('limits', 'max_field_length', v)}
                         min=${1000} max=${200000} />
 
-                    <button class="btn btn-ghost btn-sm" onClick=${clearOverrides} style="margin-top: var(--sp-2)">
+                    <button class="btn btn-ghost btn-sm" onClick=${() => onChange({})} style="margin-top: var(--sp-2)">
                         Reset all overrides
                     </button>
                 </div>
@@ -382,102 +395,21 @@ function ClientSettings() {
     `;
 }
 
-function ServerPasswordGate({ onUnlock }) {
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [verifying, setVerifying] = useState(false);
-
-    async function onSubmit(e) {
-        e.preventDefault();
-        if (!password) return;
-        setVerifying(true);
-        setError('');
-        const valid = await verifyAdminPassword(password);
-        setVerifying(false);
-        if (valid) {
-            onUnlock(password);
-        } else {
-            setError('Invalid admin password');
-        }
-    }
-
-    return html`
-        <div class="settings-password-gate">
-            <p class="settings-hint">Enter admin password to access server configuration.</p>
-            <form onSubmit=${onSubmit}>
-                <div class="settings-field">
-                    <div class="settings-key-input">
-                        <input
-                            type="password"
-                            value=${password}
-                            placeholder="Admin password..."
-                            onInput=${(e) => setPassword(e.target.value)}
-                            autocomplete="off"
-                            autofocus
-                        />
-                        <button
-                            type="submit"
-                            class="btn btn-submit btn-sm"
-                            disabled=${verifying || !password}
-                        >${verifying ? '...' : 'Unlock'}</button>
-                    </div>
-                </div>
-                ${error && html`<p class="settings-message settings-message-error">${error}</p>`}
-            </form>
-        </div>
-    `;
-}
-
-function ServerConfigEditor({ password }) {
-    const [config, setConfig] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [message, setMessage] = useState(null);
+function ServerConfigForm({ config, onChange }) {
     const [newModel, setNewModel] = useState({ id: '', name: '', description: '' });
 
-    useEffect(() => {
-        loadServerConfig(password).then(cfg => {
-            setConfig(cfg);
-            setLoading(false);
-        }).catch(() => setLoading(false));
-    }, []);
-
-    if (loading) return html`<p class="settings-hint">Loading server config...</p>`;
-    if (!config) return html`<p class="settings-hint">Failed to load server config.</p>`;
-
     function update(section, key, value) {
-        setConfig({
-            ...config,
-            [section]: { ...config[section], [key]: value },
-        });
+        onChange({ ...config, [section]: { ...config[section], [key]: value } });
     }
 
     function addModel() {
         if (!newModel.id || !newModel.name) return;
-        setConfig({
-            ...config,
-            models: [...config.models, { ...newModel }],
-        });
+        onChange({ ...config, models: [...config.models, { ...newModel }] });
         setNewModel({ id: '', name: '', description: '' });
     }
 
     function removeModel(index) {
-        setConfig({
-            ...config,
-            models: config.models.filter((_, i) => i !== index),
-        });
-    }
-
-    async function onSave() {
-        setSaving(true);
-        setMessage(null);
-        const result = await saveServerConfig(config, password);
-        setSaving(false);
-        if (result.success) {
-            setMessage({ type: 'success', text: 'Config saved' });
-        } else {
-            setMessage({ type: 'error', text: result.error || 'Save failed' });
-        }
+        onChange({ ...config, models: config.models.filter((_, i) => i !== index) });
     }
 
     return html`
@@ -507,10 +439,9 @@ function ServerConfigEditor({ password }) {
                 <label>Default Model ID</label>
                 <input
                     type="text"
-                    class="settings-number-input"
+                    class="settings-text-input"
                     value=${config.model.default_model_id}
                     onInput=${(e) => update('model', 'default_model_id', e.target.value)}
-                    style="width: 100%"
                 />
             </div>
             <${NumberInput} label="Max Completion Tokens"
@@ -543,10 +474,7 @@ function ServerConfigEditor({ password }) {
             <h3>Search</h3>
             <${SearchProvidersList}
                 providers=${config.search?.providers || []}
-                onChange=${(v) => setConfig({
-                    ...config,
-                    search: { ...config.search, providers: v || [] },
-                })}
+                onChange=${(v) => onChange({ ...config, search: { ...config.search, providers: v || [] } })}
             />
             <${NumberInput} label="Max Results"
                 value=${config.search.max_results}
@@ -561,10 +489,7 @@ function ServerConfigEditor({ password }) {
                 label="HuggingFace Token"
                 value=${config.other_keys?.hf_token || ''}
                 placeholder="hf_..."
-                onChange=${(v) => setConfig({
-                    ...config,
-                    other_keys: { ...config.other_keys, hf_token: v },
-                })}
+                onChange=${(v) => onChange({ ...config, other_keys: { ...config.other_keys, hf_token: v } })}
             />
         </div>
 
@@ -629,43 +554,129 @@ function ServerConfigEditor({ password }) {
                 <button class="btn btn-ghost btn-sm" onClick=${addModel}>+ Add</button>
             </div>
         </div>
+    `;
+}
 
-        <div class="settings-actions">
-            ${message && html`
-                <span class="settings-message settings-message-${message.type}">
-                    ${message.text}
-                </span>
-            `}
-            <button
-                class="btn btn-submit"
-                onClick=${onSave}
-                disabled=${saving}
-            >
-                ${saving ? 'Saving...' : 'Save Server Config'}
-            </button>
+function ServerPasswordGate({ onUnlock }) {
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [verifying, setVerifying] = useState(false);
+
+    async function onSubmit(e) {
+        e.preventDefault();
+        if (!password) return;
+        setVerifying(true);
+        setError('');
+        const valid = await verifyAdminPassword(password);
+        setVerifying(false);
+        if (valid) {
+            onUnlock(password);
+        } else {
+            setError('Invalid admin password');
+        }
+    }
+
+    return html`
+        <div class="settings-password-gate">
+            <p class="settings-hint">Enter admin password to access server configuration.</p>
+            <form onSubmit=${onSubmit}>
+                <div class="settings-field">
+                    <div class="settings-key-input">
+                        <input
+                            type="password"
+                            value=${password}
+                            placeholder="Admin password..."
+                            onInput=${(e) => setPassword(e.target.value)}
+                            autocomplete="off"
+                            autofocus
+                        />
+                        <button
+                            type="submit"
+                            class="btn btn-submit btn-sm"
+                            disabled=${verifying || !password}
+                        >${verifying ? '...' : 'Unlock'}</button>
+                    </div>
+                </div>
+                ${error && html`<p class="settings-message settings-message-error">${error}</p>`}
+            </form>
         </div>
     `;
 }
 
-function ServerSettings() {
-    const [adminPassword, setAdminPassword] = useState(null);
-
-    // Reset password whenever this component unmounts (tab switch / modal close)
-    useEffect(() => {
-        return () => setAdminPassword(null);
-    }, []);
-
-    if (!adminPassword) {
-        return html`<${ServerPasswordGate} onUnlock=${(pw) => setAdminPassword(pw)} />`;
-    }
-
-    return html`<${ServerConfigEditor} password=${adminPassword} />`;
-}
+// ---------------------------------------------------------------------------
+// SettingsModal — owns all state, renders fixed footer with Save/Cancel
+// ---------------------------------------------------------------------------
 
 export function SettingsModal() {
     const settingsOpen = useStore(s => s.settingsOpen);
     const enableConfigUI = useStore(s => s.enableConfigUI);
     const [activeTab, setActiveTab] = useState('client');
+
+    // --- Client state ---
+    const [clientSaved, setClientSaved] = useState(() => getClientConfig());
+    const [clientDraft, setClientDraft] = useState(() => getClientConfig());
+    const clientDirty = JSON.stringify(clientDraft) !== JSON.stringify(clientSaved);
+
+    function onClientSave() {
+        saveClientConfig(clientDraft);
+        setClientSaved(clientDraft);
+    }
+
+    function onClientCancel() {
+        setClientDraft(clientSaved);
+    }
+
+    // --- Server state ---
+    const [adminPassword, setAdminPassword] = useState(null);
+    const [serverConfig, setServerConfig] = useState(null);
+    const [serverSaved, setServerSaved] = useState(null);
+    const [serverLoading, setServerLoading] = useState(false);
+    const [serverSaving, setServerSaving] = useState(false);
+    const [serverMessage, setServerMessage] = useState(null);
+
+    const serverDirty = serverConfig !== null &&
+        JSON.stringify(serverConfig) !== JSON.stringify(serverSaved);
+
+    function onAdminUnlock(password) {
+        setAdminPassword(password);
+        setServerLoading(true);
+        setServerConfig(null);
+        setServerSaved(null);
+        loadServerConfig(password).then(cfg => {
+            setServerConfig(cfg);
+            setServerSaved(cfg);
+            setServerLoading(false);
+        }).catch(() => setServerLoading(false));
+    }
+
+    async function onServerSave() {
+        setServerSaving(true);
+        setServerMessage(null);
+        const result = await saveServerConfig(serverConfig, adminPassword);
+        setServerSaving(false);
+        if (result.success) {
+            setServerSaved(serverConfig);
+            setServerMessage({ type: 'success', text: 'Config saved' });
+        } else {
+            setServerMessage({ type: 'error', text: result.error || 'Save failed' });
+        }
+    }
+
+    function onServerCancel() {
+        setServerConfig(serverSaved);
+        setServerMessage(null);
+    }
+
+    // Reset server state when modal closes or tab changes away
+    function onTabChange(tab) {
+        if (tab !== 'server') {
+            setAdminPassword(null);
+            setServerConfig(null);
+            setServerSaved(null);
+            setServerMessage(null);
+        }
+        setActiveTab(tab);
+    }
 
     if (!settingsOpen) return null;
 
@@ -675,33 +686,69 @@ export function SettingsModal() {
         }
     }
 
+    // --- Footer content per tab ---
+    let footer = null;
+    if (activeTab === 'client') {
+        footer = html`
+            <button class="btn btn-ghost btn-sm" onClick=${onClientCancel} disabled=${!clientDirty}>
+                Cancel
+            </button>
+            <button class="btn btn-submit" onClick=${onClientSave} disabled=${!clientDirty}>
+                Save
+            </button>
+        `;
+    } else if (activeTab === 'server' && adminPassword && serverConfig) {
+        footer = html`
+            ${serverMessage && html`
+                <span class="settings-message settings-message-${serverMessage.type}">
+                    ${serverMessage.text}
+                </span>
+            `}
+            <button class="btn btn-ghost btn-sm" onClick=${onServerCancel} disabled=${!serverDirty}>
+                Cancel
+            </button>
+            <button class="btn btn-submit" onClick=${onServerSave} disabled=${serverSaving || !serverDirty}>
+                ${serverSaving ? 'Saving...' : 'Save'}
+            </button>
+        `;
+    }
+
     return html`
         <div class="settings-modal-overlay" onClick=${onOverlayClick}>
             <div class="settings-modal">
                 <div class="settings-modal-header">
                     <h2>Settings</h2>
-                    <button class="btn btn-ghost" onClick=${toggleSettings}>
-                        \u2715
-                    </button>
+                    <button class="btn btn-ghost" onClick=${toggleSettings}>\u2715</button>
                 </div>
 
                 <div class="settings-tabs">
                     <button
                         class="settings-tab ${activeTab === 'client' ? 'settings-tab-active' : ''}"
-                        onClick=${() => setActiveTab('client')}
+                        onClick=${() => onTabChange('client')}
                     >Client</button>
                     ${enableConfigUI && html`
                         <button
                             class="settings-tab ${activeTab === 'server' ? 'settings-tab-active' : ''}"
-                            onClick=${() => setActiveTab('server')}
+                            onClick=${() => onTabChange('server')}
                         >Server</button>
                     `}
                 </div>
 
                 <div class="settings-modal-body">
-                    ${activeTab === 'client' && html`<${ClientSettings} />`}
-                    ${activeTab === 'server' && enableConfigUI && html`<${ServerSettings} />`}
+                    ${activeTab === 'client' && html`
+                        <${ClientSettingsForm} draft=${clientDraft} onChange=${setClientDraft} />
+                    `}
+                    ${activeTab === 'server' && enableConfigUI && html`
+                        ${!adminPassword && html`<${ServerPasswordGate} onUnlock=${onAdminUnlock} />`}
+                        ${adminPassword && serverLoading && html`<p class="settings-hint">Loading server config...</p>`}
+                        ${adminPassword && !serverLoading && !serverConfig && html`<p class="settings-hint">Failed to load server config.</p>`}
+                        ${adminPassword && serverConfig && html`
+                            <${ServerConfigForm} config=${serverConfig} onChange=${setServerConfig} />
+                        `}
+                    `}
                 </div>
+
+                ${footer && html`<div class="settings-modal-footer">${footer}</div>`}
             </div>
         </div>
     `;

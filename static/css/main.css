@@ -1595,6 +1595,30 @@ footer p {
     border-color: var(--accent);
 }
 
+.settings-text-input {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-0);
+    padding: 6px 10px;
+    border-radius: var(--rad);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    width: 100%;
+    transition: border-color var(--duration) var(--ease);
+}
+
+.settings-text-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.settings-field-note {
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    font-weight: 400;
+    margin-left: var(--sp-1);
+}
+
 .settings-models-list {
     display: flex;
     flex-direction: column;
@@ -1660,14 +1684,14 @@ footer p {
     border-color: var(--accent);
 }
 
-.settings-actions {
+.settings-modal-footer {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: var(--sp-3);
-    padding-top: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
     border-top: 1px solid var(--border);
-    margin-top: var(--sp-3);
+    flex-shrink: 0;
 }
 
 .settings-message {
