@@ -1,125 +1,28 @@
 # Open Deep Research
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
 
-Adapted from: https://github.com/huggingface/smolagents/tree/main/examples, added ui and simplified config for **USER FRIENDLY** try outs!!
+An open replication of [OpenAI's Deep Research](https://openai.com/index/introducing-deep-research/) with a modern web UI — adapted from [HuggingFace smolagents](https://github.com/huggingface/smolagents/tree/main/examples) with simplified configuration for easy self-hosting.
 
-Welcome to this open replication of [OpenAI's Deep Research](https://openai.com/index/introducing-deep-research/)! This agent attempts to replicate OpenAI's model and achieve similar performance on research tasks.
+Read more about the original implementation in the [HuggingFace blog post](https://huggingface.co/blog/open-deep-research).
 
-Read more about this implementation's goal and methods in our [blog post](https://huggingface.co/blog/open-deep-research).
+This agent achieves **55% pass@1** on the GAIA validation set, compared to **67%** for OpenAI's Deep Research.
 
+---
 
-This agent achieves **55% pass@1** on the GAIA validation set, compared to **67%** for the original Deep Research.
+## Features
 
-## Setup
-
-To get started, follow the steps below:
-
-### Clone the repository
-
-```bash
-git clone https://github.com/S2thend/open-deep-research-with-ui.git
-cd open-deep-research-with-ui
-```
-
-### Install system dependencies
-
-The project uses `pydub` and `SpeechRecognition` which require **FFmpeg** for audio processing and format conversion.
-
-**Install FFmpeg:**
-
-- **macOS**: `brew install ffmpeg`
-- **Linux**: `sudo apt-get install ffmpeg`
-- **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) or `choco install ffmpeg`
-
-Verify installation: `ffmpeg -version`
-
-### Create virtual environment and install dependencies
-
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e .
-```
-
-For development tools (testing, linting, type checking):
-
-```bash
-pip install -e ".[dev]"
-```
-
-### Set up environment variables
-
-Create a `.env` file from the `.env.example` template and configure the following variables:
-
-**Required:**
-- `OPENAI_API_KEY` - For the visual QA tool (image analysis) and if using OpenAI models
-  - [Sign up here to get a key](https://platform.openai.com/signup)
-
-**Optional:**
-- `HF_TOKEN` - Only required for `run_gaia.py` (for downloading datasets)
-  - [Get your token here](https://huggingface.co/settings/tokens)
-- `META_SOTA_API_KEY` - For MetaSo search engine (alternative to DuckDuckGo)
-  - [Get your API key from MetaSo](https://metaso.cn)
-
-**Search Engine Configuration:**
-
-The project supports multiple search engines via the `SEARCH_ENGINE` environment variable:
-
-- **DuckDuckGo (DDGS)** - Default, no API key required
-  ```bash
-  SEARCH_ENGINE=DDGS
-  ```
-
-- **MetaSo (META_SOTA)** - Requires `META_SOTA_API_KEY`
-  ```bash
-  SEARCH_ENGINE=META_SOTA
-  META_SOTA_API_KEY=your_api_key_here
-  ```
-
-- **Multiple engines with fallback** - Use comma-separated values
-  ```bash
-  SEARCH_ENGINE=META_SOTA,DDGS  # Try MetaSo first, fallback to DuckDuckGo
-  ```
-
-The agent will use the configured search engine(s) in order, with automatic fallback if one fails or is unavailable.
-
-**Model selection:**
-Depending on the model you want to use, set the corresponding environment variables:
-- For `o1` model (default): `OPENAI_API_KEY` required
-- For other OpenAI-compatible models: Follow the provider's documentation
-- For local models (Ollama, LM Studio): No API key required
-
-> [!WARNING]
-> The use of the default `o1` model is restricted to tier-3 access: https://help.openai.com/en/articles/10362446-api-access-to-o1-and-o3-mini
-
-
-## Usage
-
-Make sure your virtual environment is activated and environment variables are set.
-
-### Command Line Interface
-
-```bash
-python run.py --model-id "o1" "Your question here!"
-```
-
-Or use other models via LiteLLM:
-
-```bash
-python run.py --model-id "ollama/mistral" "Your question here!"
-python run.py --model-id "claude-3-5-sonnet-20241022" "Your question here!"
-```
-
-### Web UI (Recommended)
-
-The web UI provides:
-- 🎨 Modern, responsive interface
-- 📝 Question input form
-- 🤖 Model selection dropdown
-- 📊 Real-time streaming output with collapsible sections
-- ⏹️ Stop button (kills process immediately)
-- 🔄 Auto-cancellation when submitting new questions
+- **Multi-agent research pipeline** — Manager + search sub-agents with real-time streaming output
+- **Modern Web UI** — Preact-based SPA with collapsible sections, model selector, and copy support
+- **Flexible model support** — Any LiteLLM-compatible model (OpenAI, Claude, DeepSeek, Ollama, etc.)
+- **Multiple search engines** — DuckDuckGo (free), SerpAPI, MetaSo with automatic fallback
+- **Session history** — SQLite-backed session storage with replay support
+- **Three run modes** — Live (real-time), Background (persistent), Auto-kill (one-shot)
+- **Model auto-discovery** — Detects available models from configured providers
+- **Vision & media tools** — Image QA, PDF analysis, audio transcription, YouTube transcripts
+- **Production-ready** — Docker, Gunicorn, multi-worker, health checks, configurable via JSON
 
 **Screenshots:**
 
@@ -134,190 +37,336 @@ The web UI provides:
   <p><em>Highlighted final answer with collapsible sections</em></p>
 </div>
 
-#### Architecture: Rendering Pipeline
+---
 
-The Web UI uses a streaming architecture where agent events are rendered in real-time:
+## Why This Project?
 
-```
-run.py (step_callbacks + StreamingLogger)
-  │  JSON-lines on stdout
-  ▼
-web_app.py (subprocess → SSE)
-  │  Server-Sent Events
-  ▼
-renderer.js (renderOutput switch)
-  │  DOM manipulation
-  ▼
-Browser DOM (nested step containers)
-```
+There are several open-source Deep Research alternatives. Here's how this project compares:
 
-**Event → DOM mapping:**
+| Feature | **This project** | [nickscamara/open-deep-research](https://github.com/nickscamara/open-deep-research) | [gpt-researcher](https://github.com/assafelovic/gpt-researcher) | [langchain/open_deep_research](https://github.com/langchain-ai/open_deep_research) | [smolagents](https://github.com/huggingface/smolagents) |
+|---|---|---|---|---|---|
+| **Docker / one-command deploy** | ✅ Pre-built image on GHCR | ✅ Dockerfile | ✅ Docker Compose | ❌ Manual | ❌ Library only |
+| **No-build frontend** | ✅ Preact + htm (no build step) | ❌ Next.js build required | ❌ Next.js build required | ❌ LangGraph Studio | — |
+| **Free search out of the box** | ✅ DuckDuckGo (no key needed) | ❌ Firecrawl API required | ⚠️ Key recommended | ⚠️ Configurable | ✅ |
+| **Model agnostic** | ✅ Any LiteLLM model | ✅ AI SDK providers | ✅ Multiple providers | ✅ Configurable | ✅ |
+| **Local model support** | ✅ Ollama, LM Studio | ⚠️ Limited | ✅ Ollama/Groq | ✅ | ✅ |
+| **Session history / replay** | ✅ SQLite-backed | ❌ | ❌ | ❌ | ❌ |
+| **Streaming UI** | ✅ SSE, 3 run modes | ✅ Real-time activity | ✅ WebSocket | ✅ Type-safe stream | ❌ |
+| **Vision / image analysis** | ✅ PDF screenshots, visual QA | ❌ | ⚠️ Limited | ❌ | ⚠️ |
+| **Audio / YouTube** | ✅ Transcription, speech | ❌ | ❌ | ❌ | ❌ |
+| **GAIA benchmark score** | **55% pass@1** | — | — | — | 55% (original) |
 
-| SSE Event | agent_name | DOM Element | Placement |
-|-----------|------------|-------------|-----------|
-| `planning_step` | null | `step-container.plan-step` | Top-level |
-| `planning_step` | "search_agent" | `step-container.plan-step` | Inside sub-agent |
-| `code_running` (agent call) | — | Placeholder `step-container` | Top-level |
-| `code_running` (other) | — | Spinner indicator | Current context |
-| `action_step` | null (calls sub-agent) | Merges into placeholder | Top-level |
-| `action_step` | null (no sub-agent) | `step-container` | Top-level |
-| `action_step` | "search_agent" | `step-container` | Inside sub-agent |
-| `final_answer` | "search_agent" | `sub-agent-result` | Inside sub-agent |
-| `final_answer` | null | Inline + top-level block | Both |
+### Key advantages of this project
 
-**DOM nesting hierarchy:**
+- **Single `docker run` deployment** — pre-built image on GHCR works on any platform with Docker: Linux, macOS, Windows, ARM, cloud VMs, Raspberry Pi.
+- **No build step** — the frontend uses Preact with `htm` template literals. No Node.js, no `npm install`, no webpack. Just open the browser.
+- **Free by default** — DuckDuckGo search requires no API key, so the agent works immediately after adding just one model API key.
+- **Session persistence** — every research run is stored in SQLite and can be replayed or shared, even after the browser tab closes.
+- **Three run modes** — run in the foreground, background, or one-shot mode depending on your use case.
+- **Broader media support** — handles PDFs, images, audio files, and YouTube transcripts that other projects leave to the user.
 
-```
-#output
-├── step-container.plan-step (manager plan)
-│   └── step-children → collapsible plan
-├── step-container (manager step — created as placeholder, merged later)
-│   └── step-children
-│       ├── model-output (reasoning)
-│       ├── Agent Call (collapsed code)
-│       ├── sub-agent-container
-│       │   └── sub-agent-children
-│       │       ├── step-container.plan-step (sub-agent plan)
-│       │       ├── step-container (sub-agent steps with tool calls)
-│       │       └── sub-agent-result (preview + collapsible)
-│       └── error (if timeout)
-├── step-container (manager step 2)
-│   └── step-children
-│       ├── Code, Execution Log
-│       └── inline-final-answer (collapsible)
-└── final_answer (prominent green block with Copy)
+---
+
+## Quick Start
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/S2thend/open-deep-research-with-ui.git
+cd open-deep-research-with-ui
 ```
 
-#### Development Mode
+### 2. Install system dependencies
 
-Start the development server:
+The project requires **FFmpeg** for audio processing.
+
+- **macOS**: `brew install ffmpeg`
+- **Linux**: `sudo apt-get install ffmpeg`
+- **Windows**: `choco install ffmpeg` or download from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+Verify: `ffmpeg -version`
+
+### 3. Install Python dependencies
+
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
+```
+
+### 4. Configure
+
+Copy the example config and add your API keys:
+
+```bash
+cp odr-config.example.json odr-config.json
+```
+
+Edit `odr-config.json` to set your model provider and API keys (see [Configuration](#configuration) below).
+
+### 5. Run
+
+```bash
+# Web UI (recommended)
+python web_app.py
+# Open http://localhost:5080
+
+# CLI
+python run.py --model-id "gpt-4o" "Your research question here"
+```
+
+---
+
+## Configuration
+
+Configuration is managed via `odr-config.json` (preferred) or environment variables.
+
+### odr-config.json
+
+Copy `odr-config.example.json` to `odr-config.json` and customize:
+
+```json
+{
+  "model": {
+    "providers": [
+      {
+        "name": "openai",
+        "api_key": "sk-...",
+        "models": ["gpt-4o", "o1", "o3-mini"]
+      }
+    ],
+    "default": "gpt-4o"
+  },
+  "search": {
+    "providers": [
+      { "name": "DDGS" },
+      { "name": "META_SOTA", "api_key": "your_key" }
+    ]
+  }
+}
+```
+
+The UI includes a built-in settings panel for client-side configuration. Server-side config is optionally protected by an admin password.
+
+### Environment variables
+
+For Docker or environments where a config file isn't convenient, you can use `.env`:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Description |
+|---|---|
+| `ENABLE_CONFIG_UI` | Enable admin config UI via web (`false` by default) |
+| `CONFIG_ADMIN_PASSWORD` | Password for server-side config changes |
+| `META_SOTA_API_KEY` | API key for MetaSo search |
+| `SERPAPI_API_KEY` | API key for SerpAPI search |
+| `DEBUG` | Enable debug logging (`False` by default) |
+| `LOG_LEVEL` | Log verbosity (`INFO` by default) |
+
+> [!NOTE]
+> API keys set in `odr-config.json` take precedence over environment variables.
+
+### Supported Models
+
+Any [LiteLLM-compatible](https://docs.litellm.ai/docs/providers) model works. Examples:
+
+```bash
+python run.py --model-id "gpt-4o" "Your question"
+python run.py --model-id "o1" "Your question"
+python run.py --model-id "claude-sonnet-4-6" "Your question"
+python run.py --model-id "deepseek/deepseek-chat" "Your question"
+python run.py --model-id "ollama/mistral" "Your question"  # local model
+```
+
+> [!WARNING]
+> The `o1` model requires OpenAI tier-3 API access: https://help.openai.com/en/articles/10362446-api-access-to-o1-and-o3-mini
+
+### Search Engines
+
+| Engine | Key Required | Notes |
+|---|---|---|
+| `DDGS` | No | Default, free DuckDuckGo |
+| `META_SOTA` | Yes | MetaSo, often better for Chinese queries |
+| `SERPAPI` | Yes | Google via SerpAPI |
+
+Multiple engines can be configured with automatic fallback — the agent tries them in order.
+
+---
+
+## Usage
+
+### Web UI
 
 ```bash
 python web_app.py
-```
-
-Then open your browser to `http://localhost:5080`
-
-You can customize the server:
-
-```bash
+# or with custom host/port:
 python web_app.py --port 8000 --host 0.0.0.0
 ```
 
-#### Production Mode
+Open `http://localhost:5080` in your browser.
 
-For production deployments, use Gunicorn:
+**Run modes** (available via the split-button in the UI):
+
+| Mode | Behavior |
+|---|---|
+| **Live** | Stream output in real-time; session ends on disconnect |
+| **Background** | Agent runs persistently; reconnect anytime to view results |
+| **Auto-kill** | Agent runs, session is cleaned up after completion |
+
+### CLI
 
 ```bash
-# Install dependencies (including gunicorn)
+python run.py --model-id "gpt-4o" "What are the latest advances in quantum computing?"
+```
+
+### GAIA Benchmark
+
+```bash
+# Requires HF_TOKEN for dataset download
+python run_gaia.py --model-id "o1" --run-name my-run
+```
+
+---
+
+## Deployment
+
+### Docker (Recommended)
+
+**Pre-built images** are available on GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
+
+docker run -d \
+  --env-file .env \
+  -v ./odr-config.json:/app/odr-config.json \
+  -p 5080:5080 \
+  --name open-deep-research \
+  ghcr.io/s2thend/open-deep-research-with-ui:latest
+```
+
+**Docker Compose** (includes volume for downloaded files):
+
+```bash
+cp .env.example .env        # configure API keys
+cp odr-config.example.json odr-config.json  # configure models
+docker-compose up -d
+docker-compose logs -f      # follow logs
+docker-compose down         # stop
+```
+
+**Build your own image:**
+
+```bash
+docker build -t open-deep-research .
+docker run -d --env-file .env -p 5080:5080 open-deep-research
+```
+
+> [!WARNING]
+> Never commit `.env` or `odr-config.json` with real API keys to git. Always pass secrets at runtime.
+
+### Gunicorn (Production)
+
+```bash
 pip install -e .
-
-# Run with gunicorn
 gunicorn -c gunicorn.conf.py web_app:app
-
-# Or with custom settings
-gunicorn --bind 0.0.0.0:5080 --workers 4 --timeout 300 web_app:app
 ```
 
 The included `gunicorn.conf.py` is pre-configured with:
 - Multi-worker process management
 - 300s timeout for long-running agent tasks
 - Proper logging and error handling
-- Auto-restart on code changes (during development)
 
-### Docker Deployment
+---
 
-For containerized deployment, use Docker or Docker Compose.
+## Architecture
 
-**Pre-built images are available on GitHub Container Registry:**
-```bash
-docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
+### Agent Pipeline
+
+```
+User Question
+    │
+    ▼
+Manager Agent (CodeAgent / ToolCallingAgent)
+    │  Plans multi-step research strategy
+    ├──▶ Search Sub-Agent × N
+    │       │  Web search → browse → extract
+    │       └──▶ Tools: DuckDuckGo/SerpAPI/MetaSo, VisitWebpage,
+    │                   TextInspector, VisualQA, YoutubeTranscript
+    │
+    └──▶ Final Answer synthesis
 ```
 
-#### Option 1: Using Pre-built Image (Fastest)
+### Streaming Pipeline
 
-```bash
-# Pull the latest image
-docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
-
-# Run with environment variables
-docker run -d \
-  --env-file .env \
-  -p 5080:5080 \
-  --name open-deep-research \
-  ghcr.io/s2thend/open-deep-research-with-ui:latest
+```
+run.py  (step_callbacks → JSON-lines on stdout)
+  │
+  ▼
+web_app.py  (subprocess → Server-Sent Events)
+  │
+  ▼
+Browser  (Preact components → DOM)
 ```
 
-#### Option 2: Docker Compose (Recommended for Development)
+**SSE event types:**
 
-```bash
-# 1. Make sure .env file is configured with your API keys
-cp .env.example .env
-# Edit .env with your actual API keys
+| Event | Description |
+|---|---|
+| `planning_step` | Agent reasoning and plan |
+| `code_running` | Code being executed |
+| `action_step` | Tool call + observation |
+| `final_answer` | Completed research result |
+| `error` | Error with details |
 
-# 2. Build and run
-docker-compose up -d
+### DOM Hierarchy
 
-# 3. View logs
-docker-compose logs -f
-
-# 4. Stop
-docker-compose down
+```
+#output
+├── step-container.plan-step       (manager plan)
+├── step-container                 (manager step)
+│   └── step-children
+│       ├── model-output           (reasoning)
+│       ├── Agent Call             (code, collapsed)
+│       └── sub-agent-container
+│           ├── step-container.plan-step  (sub-agent plan)
+│           ├── step-container            (sub-agent steps)
+│           └── sub-agent-result          (preview + collapsible)
+└── final_answer                   (prominent result block)
 ```
 
-#### Option 3: Build Your Own Image
+---
+
+## Reproducibility (GAIA Results)
+
+The 55% pass@1 result on GAIA was obtained with augmented data:
+
+- Single-page PDFs and XLS files were opened and screenshotted as `.png`
+- The file loader checks for a `.png` version of each attachment and prefers it
+
+The augmented dataset is available at [smolagents/GAIA-annotated](https://huggingface.co/datasets/smolagents/GAIA-annotated) (access granted instantly on request).
+
+---
+
+## Development
 
 ```bash
-# Build image locally
-docker build -t open-deep-research .
-
-# Run with environment variables
-docker run -d \
-  -e OPENAI_API_KEY=your_key_here \
-  -e DEEPSEEK_API_KEY=your_key_here \
-  -e META_SOTA_API_KEY=your_key_here \
-  -e SEARCH_ENGINE=META_SOTA,DDGS \
-  -p 5080:5080 \
-  --name open-deep-research \
-  open-deep-research
-
-# Or use --env-file
-docker run -d \
-  --env-file .env \
-  -p 5080:5080 \
-  --name open-deep-research \
-  open-deep-research
+pip install -e ".[dev]"   # includes testing, linting, type checking tools
+python web_app.py         # starts dev server with auto-reload
 ```
 
-**Important Security Notes:**
-- Never commit `.env` file with real API keys to git
-- Never bake API keys into Docker images
-- Always pass secrets at runtime using `-e` flags or `--env-file`
+The frontend is a dependency-free Preact app using `htm` for JSX-like templates — no build step required. Edit files in `static/js/components/` and refresh.
 
-### GAIA Benchmark Evaluation
-
-For the GAIA benchmark evaluation:
-
-```bash
-python run_gaia.py --model-id "o1" --run-name my-run
-```
-
-## Full reproducibility of results
-
-The data used in our submissions to GAIA was augmented in this way:
- -  For each single-page .pdf or .xls file, it was opened in a file reader (MacOS Sonoma Numbers or Preview), and a ".png" screenshot was taken and added to the folder.
-- Then for any file used in a question, the file loading system checks if there is a ".png" extension version of the file, and loads it instead of the original if it exists.
-
-This process was done manually but could be automatized.
-
-After processing, the annotated was uploaded to a [new dataset](https://huggingface.co/datasets/smolagents/GAIA-annotated). You need to request access (granted instantly).
+---
 
 ## License
 
-This project is licensed under the **Apache License 2.0** - the same license as the original [smolagents](https://github.com/huggingface/smolagents) repository to honor the open-source contributions of the HuggingFace team.
+Licensed under the **Apache License 2.0** — the same license as [smolagents](https://github.com/huggingface/smolagents).
 
-See the [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE) for details.
 
 **Acknowledgments:**
-- Original implementation by HuggingFace [smolagents](https://github.com/huggingface/smolagents)
-- Web UI, process-based architecture, and security enhancements added in this fork
+- Original research agent implementation by [HuggingFace smolagents](https://github.com/huggingface/smolagents)
+- Web UI, session management, streaming architecture, and configuration system added in this fork
