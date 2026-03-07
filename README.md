@@ -14,6 +14,7 @@ This agent achieves **55% pass@1** on the GAIA validation set, compared to **67%
 
 ## Features
 
+- **Parallel background research** — fire off multiple research tasks simultaneously, monitor them independently, and come back to results later — even after closing the browser
 - **Multi-agent research pipeline** — Manager + search sub-agents with real-time streaming output
 - **Modern Web UI** — Preact-based SPA with collapsible sections, model selector, and copy support
 - **Flexible model support** — Any LiteLLM-compatible model (OpenAI, Claude, DeepSeek, Ollama, etc.)
@@ -39,6 +40,46 @@ This agent achieves **55% pass@1** on the GAIA validation set, compared to **67%
 
 ---
 
+## Parallel Background Research
+
+Deep research tasks are slow — a single run can take 10–30 minutes. Most tools block the UI until the task completes, forcing you to wait.
+
+This project takes a different approach: **fire off as many research tasks as you want and let them run in the background — simultaneously.**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Question A: "What are the latest advances in LLMs?" │  ← running
+│  Question B: "Compare top vector databases in 2025"  │  ← running
+│  Question C: "EU AI Act compliance checklist"        │  ← completed ✓
+└─────────────────────────────────────────────────────┘
+        All visible in the sidebar. Click any to inspect.
+```
+
+**How it works:**
+
+1. Select **Background** or **Auto-kill** run mode (the default)
+2. Submit your first research question — the agent starts immediately in a subprocess
+3. The UI is not locked — submit a second question, a third, as many as you need
+4. Each agent runs independently, persisting all its reasoning steps and results to SQLite
+5. Use the sidebar to switch between running sessions in real-time
+6. Close the browser — in **Background** mode, agents keep running on the server
+7. Return later and click any session to replay the full research trace
+
+**Run mode comparison:**
+
+| Mode | Multiple at once | Survives browser close | UI locked |
+|---|---|---|---|
+| **Background** | ✅ | ✅ | ✗ |
+| **Auto-kill** | ✅ | ✗ (killed on tab close) | ✗ |
+| **Live** | ✗ | ✗ | ✅ |
+
+This is particularly useful for:
+- Batch research workflows where you queue several related questions and review results together
+- Long-running queries where you don't want to keep a tab open
+- Teams sharing a self-hosted instance with multiple concurrent users
+
+---
+
 ## Why This Project?
 
 There are several open-source Deep Research alternatives. Here's how this project compares:
@@ -50,6 +91,7 @@ There are several open-source Deep Research alternatives. Here's how this projec
 | **Free search out of the box** | ✅ DuckDuckGo (no key needed) | ❌ Firecrawl API required | ⚠️ Key recommended | ⚠️ Configurable | ✅ |
 | **Model agnostic** | ✅ Any LiteLLM model | ✅ AI SDK providers | ✅ Multiple providers | ✅ Configurable | ✅ |
 | **Local model support** | ✅ Ollama, LM Studio | ⚠️ Limited | ✅ Ollama/Groq | ✅ | ✅ |
+| **Parallel background tasks** | ✅ Multiple simultaneous runs | ❌ | ❌ | ❌ | ❌ |
 | **Session history / replay** | ✅ SQLite-backed | ❌ | ❌ | ❌ | ❌ |
 | **Streaming UI** | ✅ SSE, 3 run modes | ✅ Real-time activity | ✅ WebSocket | ✅ Type-safe stream | ❌ |
 | **Vision / image analysis** | ✅ PDF screenshots, visual QA | ❌ | ⚠️ Limited | ❌ | ⚠️ |
@@ -58,11 +100,10 @@ There are several open-source Deep Research alternatives. Here's how this projec
 
 ### Key advantages of this project
 
+- **Parallel background research** — the most unique feature in this space. Start multiple deep research tasks at the same time — each runs as an independent subprocess, persists all events to SQLite, and can be monitored or replayed independently. Close the browser, come back hours later, and your results are waiting. No other open-source deep research tool supports this workflow.
 - **Single `docker run` deployment** — pre-built image on GHCR works on any platform with Docker: Linux, macOS, Windows, ARM, cloud VMs, Raspberry Pi.
 - **No build step** — the frontend uses Preact with `htm` template literals. No Node.js, no `npm install`, no webpack. Just open the browser.
 - **Free by default** — DuckDuckGo search requires no API key, so the agent works immediately after adding just one model API key.
-- **Session persistence** — every research run is stored in SQLite and can be replayed or shared, even after the browser tab closes.
-- **Three run modes** — run in the foreground, background, or one-shot mode depending on your use case.
 - **Broader media support** — handles PDFs, images, audio files, and YouTube transcripts that other projects leave to the user.
 
 ---
