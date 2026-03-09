@@ -4,6 +4,8 @@
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
 
+> **Read this in other languages:** 🇨🇳 [中文](docs/README_zh.md) · 🇫🇷 [Français](docs/README_fr.md) · 🇪🇸 [Español](docs/README_es.md)
+
 An open replication of [OpenAI's Deep Research](https://openai.com/index/introducing-deep-research/) with a modern web UI — adapted from [HuggingFace smolagents](https://github.com/huggingface/smolagents/tree/main/examples) with simplified configuration for easy self-hosting.
 
 Read more about the original implementation in the [HuggingFace blog post](https://huggingface.co/blog/open-deep-research).
