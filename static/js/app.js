@@ -91,7 +91,7 @@ function App() {
                         <${OutputPanel} />
                     </div>
                     <footer>
-                        <p>Powered by smolagents and LiteLLM</p>
+                        <p>Powered by smolagents</p>
                     </footer>
                 </div>
             </div>

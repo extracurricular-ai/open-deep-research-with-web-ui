@@ -359,6 +359,14 @@ function ClientSettingsForm({ draft, onChange }) {
                             <option value="high">High</option>
                         </select>
                     </div>
+                    <${OverrideNumberInput} label="Retry Max Attempts"
+                        value=${g('model', 'retry_max_attempts')}
+                        onChange=${(v) => updateOverride('model', 'retry_max_attempts', v)}
+                        min=${1} max=${20} />
+                    <${OverrideNumberInput} label="Retry Wait Seconds"
+                        value=${g('model', 'retry_wait_seconds')}
+                        onChange=${(v) => updateOverride('model', 'retry_wait_seconds', v)}
+                        min=${1} max=${120} />
 
                     <h4>Search</h4>
                     <${OverrideNumberInput} label="Max Results"
@@ -459,6 +467,14 @@ function ServerConfigForm({ config, onChange }) {
                     <option value="high">High</option>
                 </select>
             </div>
+            <${NumberInput} label="Retry Max Attempts"
+                value=${config.model.retry_max_attempts}
+                onChange=${(v) => update('model', 'retry_max_attempts', v)}
+                min=${1} max=${20} />
+            <${NumberInput} label="Retry Wait Seconds"
+                value=${config.model.retry_wait_seconds}
+                onChange=${(v) => update('model', 'retry_wait_seconds', v)}
+                min=${1} max=${120} />
         </div>
 
         <div class="settings-section">

@@ -19,7 +19,7 @@ This agent achieves **55% pass@1** on the GAIA validation set, compared to **67%
 - **Parallel background research** — fire off multiple research tasks simultaneously, monitor them independently, and come back to results later — even after closing the browser
 - **Multi-agent research pipeline** — Manager + search sub-agents with real-time streaming output
 - **Modern Web UI** — Preact-based SPA with collapsible sections, model selector, and copy support
-- **Flexible model support** — Any LiteLLM-compatible model (OpenAI, Claude, DeepSeek, Ollama, etc.)
+- **Flexible model support** — OpenAI, Anthropic, DeepSeek, Ollama, and any OpenAI-compatible provider
 - **Multiple search engines** — DuckDuckGo (free), SerpAPI, MetaSo with automatic fallback
 - **Session history** — SQLite-backed session storage with replay support
 - **Three run modes** — Live (real-time), Background (persistent), Auto-kill (one-shot)
@@ -91,7 +91,7 @@ There are several open-source Deep Research alternatives. Here's how this projec
 | **Docker / one-command deploy** | ✅ Pre-built image on GHCR | ✅ Dockerfile | ✅ Docker Compose | ❌ Manual | ❌ Library only |
 | **No-build frontend** | ✅ Preact + htm (no build step) | ❌ Next.js build required | ❌ Next.js build required | ❌ LangGraph Studio | — |
 | **Free search out of the box** | ✅ DuckDuckGo (no key needed) | ❌ Firecrawl API required | ⚠️ Key recommended | ⚠️ Configurable | ✅ |
-| **Model agnostic** | ✅ Any LiteLLM model | ✅ AI SDK providers | ✅ Multiple providers | ✅ Configurable | ✅ |
+| **Model agnostic** | ✅ OpenAI, Anthropic, DeepSeek, Ollama | ✅ AI SDK providers | ✅ Multiple providers | ✅ Configurable | ✅ |
 | **Local model support** | ✅ Ollama, LM Studio | ⚠️ Limited | ✅ Ollama/Groq | ✅ | ✅ |
 | **Parallel background tasks** | ✅ Multiple simultaneous runs | ❌ | ❌ | ❌ | ❌ |
 | **Session history / replay** | ✅ SQLite-backed | ❌ | ❌ | ❌ | ❌ |
@@ -213,7 +213,7 @@ cp .env.example .env
 
 ### Supported Models
 
-Any [LiteLLM-compatible](https://docs.litellm.ai/docs/providers) model works. Examples:
+Supports OpenAI, Anthropic, DeepSeek, Ollama, and any OpenAI-compatible provider. Model routing is automatic based on model name prefix. Examples:
 
 ```bash
 python run.py --model-id "gpt-4o" "Your question"

@@ -17,7 +17,7 @@ Este agente alcanza **55% pass@1** en el conjunto de validación GAIA, comparado
 - **Investigación paralela en segundo plano** — lanza múltiples tareas de investigación simultáneamente, monitoréalas independientemente y consulta los resultados más tarde — incluso después de cerrar el navegador
 - **Pipeline de investigación multi-agente** — Manager + sub-agentes de búsqueda con salida en streaming en tiempo real
 - **Interfaz web moderna** — SPA basada en Preact con secciones colapsables, selector de modelos y soporte para copiar
-- **Soporte de modelos flexible** — Cualquier modelo compatible con LiteLLM (OpenAI, Claude, DeepSeek, Ollama, etc.)
+- **Soporte de modelos flexible** — Cualquier modelo OpenAI, Anthropic, DeepSeek, Ollama y cualquier proveedor compatible con OpenAI
 - **Múltiples motores de búsqueda** — DuckDuckGo (gratuito), SerpAPI, MetaSo con replegamiento automático
 - **Historial de sesiones** — Almacenamiento de sesiones basado en SQLite con soporte de reproducción
 - **Tres modos de ejecución** — Live (tiempo real), Background (persistente), Auto-kill (one-shot)
@@ -89,7 +89,7 @@ Hay varias alternativas open source a Deep Research. Así es como se compara est
 | **Docker / despliegue en un comando** | ✅ Imagen pre-construida en GHCR | ✅ Dockerfile | ✅ Docker Compose | ❌ Manual | ❌ Solo biblioteca |
 | **Frontend sin compilación** | ✅ Preact + htm (sin paso de compilación) | ❌ Requiere compilación Next.js | ❌ Requiere compilación Next.js | ❌ LangGraph Studio | — |
 | **Búsqueda gratuita de inmediato** | ✅ DuckDuckGo (sin clave necesaria) | ❌ Requiere API Firecrawl | ⚠️ Clave recomendada | ⚠️ Configurable | ✅ |
-| **Agnóstico en modelos** | ✅ Cualquier modelo LiteLLM | ✅ Proveedores AI SDK | ✅ Múltiples proveedores | ✅ Configurable | ✅ |
+| **Agnóstico en modelos** | ✅ OpenAI, Anthropic, DeepSeek, Ollama | ✅ Proveedores AI SDK | ✅ Múltiples proveedores | ✅ Configurable | ✅ |
 | **Soporte de modelos locales** | ✅ Ollama, LM Studio | ⚠️ Limitado | ✅ Ollama/Groq | ✅ | ✅ |
 | **Tareas paralelas en segundo plano** | ✅ Múltiples ejecuciones simultáneas | ❌ | ❌ | ❌ | ❌ |
 | **Historial / reproducción de sesiones** | ✅ Basado en SQLite | ❌ | ❌ | ❌ | ❌ |
@@ -211,7 +211,7 @@ cp .env.example .env
 
 ### Modelos compatibles
 
-Cualquier modelo [compatible con LiteLLM](https://docs.litellm.ai/docs/providers) funciona. Ejemplos:
+Soporta OpenAI, Anthropic, DeepSeek, Ollama y cualquier proveedor compatible con OpenAI. El enrutamiento del modelo es automatico segun el prefijo del nombre. Ejemplos:
 
 ```bash
 python run.py --model-id "gpt-4o" "Tu pregunta"

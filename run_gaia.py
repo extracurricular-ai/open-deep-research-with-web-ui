@@ -33,11 +33,12 @@ from tqdm import tqdm
 from smolagents import (
     CodeAgent,
     GoogleSearchTool,
-    LiteLLMModel,
+    OpenAIServerModel,
     Model,
     Tool,
     ToolCallingAgent,
 )
+from scripts.anthropic_model import AnthropicModel
 
 
 class TavilySearchTool(Tool):
@@ -102,7 +103,9 @@ def parse_args():
 
 ### IMPORTANT: EVALUATION SWITCHES
 
-print("Make sure you deactivated any VPN like Tailscale, else some URLs will be blocked!")
+print(
+    "Make sure you deactivated any VPN like Tailscale, else some URLs will be blocked!"
+)
 
 custom_role_conversions = {"tool-call": "assistant", "tool-response": "user"}
 
@@ -159,7 +162,9 @@ def create_agent_team(model: Model):
     """,
         provide_run_summary=True,
     )
-    text_webbrowser_agent.prompt_templates["managed_agent"]["task"] += """You can navigate to .txt online files.
+    text_webbrowser_agent.prompt_templates["managed_agent"][
+        "task"
+    ] += """You can navigate to .txt online files.
     If a non-html page is in another format, especially .pdf or a Youtube video, use tool 'inspect_file_as_text' to inspect it.
     Additionally, if after some searching you find out that you need more information to answer the question, you can use `final_answer` with your request for clarification as argument to request for more information."""
 
@@ -205,7 +210,9 @@ def load_gaia_dataset(use_raw_dataset: bool, set_to_run: str) -> datasets.Datase
         # data_files={"validation": "validation/metadata.jsonl", "test": "test/metadata.jsonl"},
     )
 
-    eval_ds = eval_ds.rename_columns({"Question": "question", "Final answer": "true_answer", "Level": "task"})
+    eval_ds = eval_ds.rename_columns(
+        {"Question": "question", "Final answer": "true_answer", "Level": "task"}
+    )
     eval_ds = eval_ds.map(preprocess_file_paths)
     return eval_ds
 
@@ -220,40 +227,62 @@ def append_answer(entry: dict, jsonl_file: str) -> None:
 
 
 def answer_single_question(
-    example: dict, model_id: str, answers_file: str, visual_inspection_tool: TextInspectorTool
+    example: dict,
+    model_id: str,
+    answers_file: str,
+    visual_inspection_tool: TextInspectorTool,
 ) -> None:
-    model_params: dict[str, Any] = {
-        "model_id": model_id,
-        "custom_role_conversions": custom_role_conversions,
-    }
-    if model_id == "o1":
-        model_params["reasoning_effort"] = "high"
-        model_params["max_completion_tokens"] = 8192
+    # Route to correct SDK based on model name
+    bare_id = model_id.split("/", 1)[1] if "/" in model_id else model_id
+    if bare_id.startswith("claude"):
+        model = AnthropicModel(
+            model_id=bare_id,
+            custom_role_conversions=custom_role_conversions,
+            max_tokens=8192 if model_id == "o1" else 4096,
+        )
     else:
-        model_params["max_tokens"] = 4096
-    model = LiteLLMModel(**model_params)
-    # model = InferenceClientModel(model_id="Qwen/Qwen3-32B", provider="novita", max_tokens=4096)
+        model_params: dict[str, Any] = {
+            "model_id": bare_id,
+            "custom_role_conversions": custom_role_conversions,
+        }
+        if bare_id.startswith("deepseek"):
+            model_params["api_base"] = "https://api.deepseek.com/v1"
+        if model_id == "o1":
+            model_params["reasoning_effort"] = "high"
+            model_params["max_completion_tokens"] = 8192
+        else:
+            model_params["max_completion_tokens"] = 4096
+        model = OpenAIServerModel(**model_params)
     document_inspection_tool = TextInspectorTool(model, 100000)
 
     agent = create_agent_team(model)
 
-    augmented_question = """You have one question to answer. It is paramount that you provide a correct answer.
+    augmented_question = (
+        """You have one question to answer. It is paramount that you provide a correct answer.
 Give it all you can: I know for a fact that you have access to all the relevant tools to solve it and find the correct answer (the answer does exist).
 Failure or 'I cannot answer' or 'None found' will not be tolerated, success will be rewarded.
 Run verification steps if that's needed, you must make sure you find the correct answer! Here is the task:
 
-""" + example["question"]
+"""
+        + example["question"]
+    )
 
     if example["file_name"]:
         if ".zip" in example["file_name"]:
             prompt_use_files = "\n\nTo solve the task above, you will have to use these attached files:\n"
             prompt_use_files += get_zip_description(
-                example["file_name"], example["question"], visual_inspection_tool, document_inspection_tool
+                example["file_name"],
+                example["question"],
+                visual_inspection_tool,
+                document_inspection_tool,
             )
         else:
             prompt_use_files = "\n\nTo solve the task above, you will have to use this attached file:\n"
             prompt_use_files += get_single_file_description(
-                example["file_name"], example["question"], visual_inspection_tool, document_inspection_tool
+                example["file_name"],
+                example["question"],
+                visual_inspection_tool,
+                document_inspection_tool,
             )
         augmented_question += prompt_use_files
 
@@ -264,7 +293,9 @@ Run verification steps if that's needed, you must make sure you find the correct
 
         agent_memory = agent.write_memory_to_messages()
 
-        final_result = prepare_response(augmented_question, agent_memory, reformulation_model=model)
+        final_result = prepare_response(
+            augmented_question, agent_memory, reformulation_model=model
+        )
 
         output = str(final_result)
         for memory_step in agent.memory.steps:
@@ -272,10 +303,18 @@ Run verification steps if that's needed, you must make sure you find the correct
         intermediate_steps = agent_memory
 
         # Check for parsing errors which indicate the LLM failed to follow the required format
-        parsing_error = True if any(["AgentParsingError" in step for step in intermediate_steps]) else False
+        parsing_error = (
+            True
+            if any(["AgentParsingError" in step for step in intermediate_steps])
+            else False
+        )
 
         # check if iteration limit exceeded
-        iteration_limit_exceeded = True if "Agent stopped due to iteration limit or time limit." in output else False
+        iteration_limit_exceeded = (
+            True
+            if "Agent stopped due to iteration limit or time limit." in output
+            else False
+        )
         raised_exception = False
 
     except Exception as e:
@@ -288,7 +327,9 @@ Run verification steps if that's needed, you must make sure you find the correct
         raised_exception = True
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     token_counts_manager = agent.monitor.get_total_token_counts()
-    token_counts_web = list(agent.managed_agents.values())[0].monitor.get_total_token_counts()
+    token_counts_web = list(agent.managed_agents.values())[
+        0
+    ].monitor.get_total_token_counts()
     total_token_counts = {
         "input": token_counts_manager["input"] + token_counts_web["input"],
         "output": token_counts_manager["output"] + token_counts_web["output"],
@@ -321,7 +362,11 @@ def get_examples_to_answer(answers_file: str, eval_ds: datasets.Dataset) -> list
         print("Error when loading records: ", e)
         print("No usable records! ▶️ Starting new.")
         done_questions = []
-    return [line for line in eval_ds.to_list() if line["question"] not in done_questions and line["file_name"]]
+    return [
+        line
+        for line in eval_ds.to_list()
+        if line["question"] not in done_questions and line["file_name"]
+    ]
 
 
 def main():
@@ -337,10 +382,14 @@ def main():
 
     with ThreadPoolExecutor(max_workers=args.concurrency) as exe:
         futures = [
-            exe.submit(answer_single_question, example, args.model_id, answers_file, visualizer)
+            exe.submit(
+                answer_single_question, example, args.model_id, answers_file, visualizer
+            )
             for example in tasks_to_run
         ]
-        for f in tqdm(as_completed(futures), total=len(tasks_to_run), desc="Processing tasks"):
+        for f in tqdm(
+            as_completed(futures), total=len(tasks_to_run), desc="Processing tasks"
+        ):
             f.result()
 
     # for example in tasks_to_run:

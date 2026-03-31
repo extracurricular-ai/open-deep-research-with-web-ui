@@ -17,7 +17,7 @@
 - **并行后台研究** —— 同时发起多个研究任务，独立监控，随时查看结果 —— 即使关闭浏览器也不影响
 - **多智能体研究流水线** —— 管理者 + 搜索子智能体，实时流式输出
 - **现代化 Web UI** —— 基于 Preact 的单页应用，支持折叠面板、模型选择器和复制功能
-- **灵活的模型支持** —— 任何兼容 LiteLLM 的模型（OpenAI、Claude、DeepSeek、Ollama 等）
+- **灵活的模型支持** —— OpenAI、Anthropic、DeepSeek、Ollama 及任何 OpenAI 兼容的提供商
 - **多搜索引擎** —— DuckDuckGo（免费）、SerpAPI、MetaSo，支持自动降级
 - **会话历史** —— 基于 SQLite 的会话存储，支持回放
 - **三种运行模式** —— 实时（Live）、后台（Background）、自动终止（Auto-kill）
@@ -89,7 +89,7 @@
 | **Docker / 一键部署** | ✅ GHCR 预构建镜像 | ✅ Dockerfile | ✅ Docker Compose | ❌ 手动部署 | ❌ 仅库文件 |
 | **无需构建前端** | ✅ Preact + htm（无需构建） | ❌ 需要 Next.js 构建 | ❌ 需要 Next.js 构建 | ❌ LangGraph Studio | — |
 | **开箱即用免费搜索** | ✅ DuckDuckGo（无需密钥） | ❌ 需要 Firecrawl API | ⚠️ 推荐使用密钥 | ⚠️ 可配置 | ✅ |
-| **模型无关** | ✅ 任意 LiteLLM 模型 | ✅ AI SDK 提供商 | ✅ 多种提供商 | ✅ 可配置 | ✅ |
+| **模型无关** | ✅ ОреnАI, Аnthrорiс, DеерSееk, Оllаmа | ✅ AI SDK 提供商 | ✅ 多种提供商 | ✅ 可配置 | ✅ |
 | **本地模型支持** | ✅ Ollama、LM Studio | ⚠️ 有限 | ✅ Ollama/Groq | ✅ | ✅ |
 | **并行后台任务** | ✅ 多任务同时运行 | ❌ | ❌ | ❌ | ❌ |
 | **会话历史 / 回放** | ✅ SQLite 支持 | ❌ | ❌ | ❌ | ❌ |
@@ -211,7 +211,7 @@ cp .env.example .env
 
 ### 支持的模型
 
-任何 [LiteLLM 兼容](https://docs.litellm.ai/docs/providers)的模型均可使用。示例：
+支持 ОреnАI、Аnthrорiс、DеерSееk、Оllаmа 及任何 ОреnАI 兼容的提供商。模型路由根据模型名称前缀自动选择。示例：
 
 ```bash
 python run.py --model-id "gpt-4o" "你的问题"

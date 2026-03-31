@@ -27,11 +27,11 @@ from scripts.visual_qa import visualizer
 from smolagents import (
     CodeAgent,
     DuckDuckGoSearchTool,
-    LiteLLMModel,
+    OpenAIServerModel,
     Tool,
     ToolCallingAgent,
 )
-
+from scripts.anthropic_model import AnthropicModel
 
 # --- JSON protocol for structured output ---
 # Save real stdout for JSON events, redirect sys.stdout to stderr
@@ -100,37 +100,44 @@ def _extract_model_reasoning(step):
     # code block tags. Strip the code block to get just the reasoning.
     if step.code_action:
         # Remove fenced code blocks (```...```)
-        text = re.sub(r'```[\s\S]*?```', '', text).strip()
+        text = re.sub(r"```[\s\S]*?```", "", text).strip()
         # Remove smolagents code block tags (<code>...</code> variants)
-        text = re.sub(r'<[^>]*code[^>]*>[\s\S]*?</[^>]*code[^>]*>', '', text, flags=re.IGNORECASE).strip()
+        text = re.sub(
+            r"<[^>]*code[^>]*>[\s\S]*?</[^>]*code[^>]*>", "", text, flags=re.IGNORECASE
+        ).strip()
 
     # Strip raw tool-call JSON that leaks into model_output when the agent
     # is interrupted mid-generation (e.g. "Calling tools:\n[{...}]")
-    text = re.sub(r'Calling tools:\s*\[[\s\S]*', '', text).strip()
+    text = re.sub(r"Calling tools:\s*\[[\s\S]*", "", text).strip()
 
     return text if text else None
 
 
 def on_action_step(step, agent=None):
     """Callback for ActionStep — emits structured step data."""
-    agent_name = getattr(agent, 'name', None) if agent else None
+    agent_name = getattr(agent, "name", None) if agent else None
 
     tool_calls_data = []
     if step.tool_calls:
         for tc in step.tool_calls:
-            tool_calls_data.append({
-                "name": tc.name,
-                "arguments": tc.arguments,
-            })
+            tool_calls_data.append(
+                {
+                    "name": tc.name,
+                    "arguments": tc.arguments,
+                }
+            )
 
     model_reasoning = _extract_model_reasoning(step)
 
     # Debug: log model_output type and presence to stderr
     import sys
+
     raw_mo = step.model_output
-    print(f"[debug] step={step.step_number} agent={agent_name} model_output type={type(raw_mo).__name__} "
-          f"len={len(raw_mo) if raw_mo else 0} reasoning={'yes' if model_reasoning else 'no'}",
-          file=sys.stderr)
+    print(
+        f"[debug] step={step.step_number} agent={agent_name} model_output type={type(raw_mo).__name__} "
+        f"len={len(raw_mo) if raw_mo else 0} reasoning={'yes' if model_reasoning else 'no'}",
+        file=sys.stderr,
+    )
 
     emit_event(
         "action_step",
@@ -142,7 +149,11 @@ def on_action_step(step, agent=None):
         observations=_truncate(step.observations),
         error=str(step.error) if step.error else None,
         is_final_answer=step.is_final_answer,
-        action_output=_truncate(str(step.action_output)) if step.action_output is not None else None,
+        action_output=(
+            _truncate(str(step.action_output))
+            if step.action_output is not None
+            else None
+        ),
         duration=step.timing.duration,
         token_usage=step.token_usage.dict() if step.token_usage else None,
     )
@@ -150,7 +161,7 @@ def on_action_step(step, agent=None):
 
 def on_planning_step(step, agent=None):
     """Callback for PlanningStep — emits plan text."""
-    agent_name = getattr(agent, 'name', None) if agent else None
+    agent_name = getattr(agent, "name", None) if agent else None
     emit_event(
         "planning_step",
         plan=step.plan,
@@ -162,7 +173,7 @@ def on_planning_step(step, agent=None):
 
 def on_final_answer(step, agent=None):
     """Callback for FinalAnswerStep — emits final answer."""
-    agent_name = getattr(agent, 'name', None) if agent else None
+    agent_name = getattr(agent, "name", None) if agent else None
     emit_event(
         "final_answer",
         output=str(step.output),
@@ -175,6 +186,7 @@ _step_callbacks = {
     PlanningStep: on_planning_step,
     FinalAnswerStep: on_final_answer,
 }
+
 
 class StreamingLogger(AgentLogger):
     """Custom logger that emits lightweight JSON events for real-time UI feedback.
@@ -212,7 +224,9 @@ class DuckDuckGoSearchToolLabeled(DuckDuckGoSearchTool):
     def forward(self, query: str) -> str:
         result = super().forward(query)
         # Replace "## Search Results" with "## Search Results (DuckDuckGo)"
-        return result.replace("## Search Results\n\n", "## Search Results (DuckDuckGo)\n\n", 1)
+        return result.replace(
+            "## Search Results\n\n", "## Search Results (DuckDuckGo)\n\n", 1
+        )
 
 
 class TavilySearchTool(Tool):
@@ -229,6 +243,7 @@ class TavilySearchTool(Tool):
     def __init__(self, api_key: str, max_results: int = 10, **kwargs):
         super().__init__(**kwargs)
         from tavily import TavilyClient
+
         self.client = TavilyClient(api_key=api_key)
         self.max_results = max_results
 
@@ -246,7 +261,7 @@ class TavilySearchTool(Tool):
                 return "No results found."
 
             results = []
-            for item in results_list[:self.max_results]:
+            for item in results_list[: self.max_results]:
                 title = item.get("title", "No title")
                 url = item.get("url", "")
                 snippet = item.get("content", "No description")
@@ -293,7 +308,9 @@ class MetaSotaSearchTool(Tool):
         }
 
         try:
-            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response = requests.post(
+                self.api_url, headers=headers, json=payload, timeout=30
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -304,7 +321,7 @@ class MetaSotaSearchTool(Tool):
                 return "No results found."
 
             results = []
-            for item in webpages[:self.max_results]:
+            for item in webpages[: self.max_results]:
                 title = item.get("title", "No title")
                 link = item.get("link", "")  # MetaSo uses 'link' not 'url'
                 snippet = item.get("snippet", "No description")
@@ -317,17 +334,24 @@ class MetaSotaSearchTool(Tool):
         except Exception as e:
             return f"Unexpected error: {str(e)}"
 
+
 append_answer_lock = threading.Lock()
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "question", type=str, help="for example: 'How many studio albums did Mercedes Sosa release before 2007?'"
+        "question",
+        type=str,
+        help="for example: 'How many studio albums did Mercedes Sosa release before 2007?'",
     )
     parser.add_argument("--model-id", type=str, default=None)
-    parser.add_argument("--config-json", type=str, default=None,
-                        help="JSON string of merged config (passed by web_app)")
+    parser.add_argument(
+        "--config-json",
+        type=str,
+        default=None,
+        help="JSON string of merged config (passed by web_app)",
+    )
     return parser.parse_args()
 
 
@@ -360,7 +384,9 @@ def _find_model_provider(cfg, model_id):
 
 def _build_browser_config(cfg):
     """Build BROWSER_CONFIG dict from config."""
-    serpapi_key = _find_search_provider_key(cfg, "SERPAPI") or os.getenv("SERPAPI_API_KEY")
+    serpapi_key = _find_search_provider_key(cfg, "SERPAPI") or os.getenv(
+        "SERPAPI_API_KEY"
+    )
     return {
         "viewport_size": cfg["browser"]["viewport_size"],
         "downloads_folder": "downloads_folder",
@@ -395,14 +421,20 @@ def get_search_tools(cfg):
         elif engine == "TAVILY":
             api_key = key or os.getenv("TAVILY_API_KEY")
             if not api_key:
-                emit_event("info", content="TAVILY API key not configured, trying next provider")
+                emit_event(
+                    "info",
+                    content="TAVILY API key not configured, trying next provider",
+                )
                 continue
             emit_event("info", content="Using Tavily search engine")
             return [TavilySearchTool(api_key=api_key, max_results=max_results)]
         elif engine == "META_SOTA":
             api_key = key or os.getenv("META_SOTA_API_KEY")
             if not api_key:
-                emit_event("info", content="META_SOTA API key not configured, trying next provider")
+                emit_event(
+                    "info",
+                    content="META_SOTA API key not configured, trying next provider",
+                )
                 continue
             emit_event("info", content="Using MetaSo search engine")
             return [MetaSotaSearchTool(api_key=api_key, max_results=max_results)]
@@ -410,10 +442,68 @@ def get_search_tools(cfg):
             # SERPAPI is used via browser config, not as a standalone search tool
             continue
         else:
-            emit_event("info", content=f"Unknown search engine: {engine}, trying next provider")
+            emit_event(
+                "info", content=f"Unknown search engine: {engine}, trying next provider"
+            )
 
-    emit_event("info", content="No usable search provider found, falling back to DuckDuckGo")
+    emit_event(
+        "info", content="No usable search provider found, falling back to DuckDuckGo"
+    )
     return [DuckDuckGoSearchToolLabeled(max_results=max_results)]
+
+
+def _get_model_routing(model_id: str) -> dict:
+    """Return provider and bare model ID based on model name prefix.
+
+    Routing rules:
+      - claude-*     -> anthropic
+      - deepseek-*   -> deepseek (OpenAI-compatible, custom base)
+      - default      -> openai
+    """
+    bare = model_id.split("/", 1)[1] if "/" in model_id else model_id
+    if bare.startswith("claude"):
+        return {"provider": "anthropic", "bare_id": bare}
+    if bare.startswith("deepseek"):
+        return {
+            "provider": "deepseek",
+            "bare_id": bare,
+            "api_base": "https://api.deepseek.com/v1",
+        }
+    return {"provider": "openai", "bare_id": bare}
+
+
+def _patch_model_retrier(model, cfg):
+    """Override smolagents' default retrier to also retry on connection errors, not just rate limits."""
+    from smolagents.utils import Retrying
+
+    def is_retryable_error(exception: BaseException) -> bool:
+        error_str = str(exception).lower()
+        return (
+            "429" in error_str
+            or "rate limit" in error_str
+            or "too many requests" in error_str
+            or "rate_limit" in error_str
+            or "connection error" in error_str
+            or "remoteprotocolerror" in error_str
+            or "peer closed connection" in error_str
+            or "incomplete chunked read" in error_str
+            or "apiconnectionerror" in error_str
+        )
+
+    import logging
+
+    logger = logging.getLogger(__name__)
+    model.retrier = Retrying(
+        max_attempts=cfg["model"].get("retry_max_attempts", 5),
+        wait_seconds=cfg["model"].get("retry_wait_seconds", 30),
+        exponential_base=2,
+        jitter=True,
+        retry_predicate=is_retryable_error,
+        reraise=True,
+        before_sleep_logger=(logger, logging.WARNING),
+        after_logger=(logger, logging.INFO),
+    )
+    return model
 
 
 def create_agent(cfg):
@@ -424,19 +514,34 @@ def create_agent(cfg):
     # Find matching provider for this model's api_key and base_url
     api_key, base_url = _find_model_provider(cfg, model_id)
 
-    model_params = {
-        "model_id": model_id,
-        "custom_role_conversions": custom_role_conversions,
-        "max_completion_tokens": cfg["model"]["max_completion_tokens"],
-        "num_retries": 3,
-    }
-    if api_key:
-        model_params["api_key"] = api_key
-    if base_url:
-        model_params["api_base"] = base_url
-    if model_id == "o1":
-        model_params["reasoning_effort"] = cfg["model"]["reasoning_effort"]
-    model = LiteLLMModel(**model_params)
+    # Route to correct SDK based on model name
+    routing = _get_model_routing(model_id)
+
+    if routing["provider"] == "anthropic":
+        api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        model = AnthropicModel(
+            model_id=routing["bare_id"],
+            api_key=api_key,
+            custom_role_conversions=custom_role_conversions,
+            max_tokens=cfg["model"]["max_completion_tokens"],
+        )
+    else:
+        model_params = {
+            "model_id": routing["bare_id"],
+            "custom_role_conversions": custom_role_conversions,
+            "max_completion_tokens": cfg["model"]["max_completion_tokens"],
+        }
+        if api_key:
+            model_params["api_key"] = api_key
+        if base_url:
+            model_params["api_base"] = base_url
+        elif routing.get("api_base"):
+            model_params["api_base"] = routing["api_base"]
+        if model_id == "o1":
+            model_params["reasoning_effort"] = cfg["model"]["reasoning_effort"]
+        model = OpenAIServerModel(**model_params)
+
+    model = _patch_model_retrier(model, cfg)
 
     text_limit = cfg["limits"]["text_limit"]
     browser_config = _build_browser_config(cfg)
@@ -471,7 +576,9 @@ def create_agent(cfg):
         step_callbacks=_step_callbacks,
         logger=_streaming_logger,
     )
-    text_webbrowser_agent.prompt_templates["managed_agent"]["task"] += """You can navigate to .txt online files.
+    text_webbrowser_agent.prompt_templates["managed_agent"][
+        "task"
+    ] += """You can navigate to .txt online files.
     If a non-html page is in another format, especially .pdf or a Youtube video, use tool 'inspect_file_as_text' to inspect it.
     Additionally, if after some searching you find out that you need more information to answer the question, you can use `final_answer` with your request for clarification as argument to request for more information."""
 
@@ -480,9 +587,19 @@ def create_agent(cfg):
     # Block network: requests, urllib, http, socket
     # Block image/file libs: PIL, cv2, imageio
     safe_imports = [
-        "math", "re", "json", "datetime", "time",
-        "collections", "itertools", "functools", "typing",
-        "statistics", "random", "string", "decimal"
+        "math",
+        "re",
+        "json",
+        "datetime",
+        "time",
+        "collections",
+        "itertools",
+        "functools",
+        "typing",
+        "statistics",
+        "random",
+        "string",
+        "decimal",
     ]
 
     manager_agent = CodeAgent(
@@ -538,6 +655,7 @@ def main():
     if args.config_json:
         import copy
         from config import _deep_merge
+
         cli_cfg = json.loads(args.config_json)
         cfg = _deep_merge(cfg, cli_cfg)
 

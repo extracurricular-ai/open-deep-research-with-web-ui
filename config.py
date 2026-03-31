@@ -24,10 +24,13 @@ DEFAULTS = {
         "providers": [
             {"provider": "openai", "api_key": "", "base_url": ""},
             {"provider": "deepseek", "api_key": "", "base_url": ""},
+            {"provider": "anthropic", "api_key": "", "base_url": ""},
         ],
         "default_model_id": "o1",
         "max_completion_tokens": 8192,
         "reasoning_effort": "high",
+        "retry_max_attempts": 5,
+        "retry_wait_seconds": 30,
     },
     "search": {
         # Order matters: first provider is primary, rest are tried as fallbacks in list order.
@@ -52,14 +55,51 @@ DEFAULTS = {
     },
     "models": [
         {"id": "o1", "name": "OpenAI o1", "description": "Advanced reasoning model"},
-        {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "description": "Fast and powerful"},
-        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini", "description": "Lightweight and efficient"},
-        {"id": "gpt-4.1-nano", "name": "GPT-4.1 Nano", "description": "Ultra-lightweight model"},
-        {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "description": "Efficient and cost-effective"},
-        {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat", "description": "Fast chat model from DeepSeek"},
-        {"id": "deepseek/deepseek-reasoner", "name": "DeepSeek Reasoner", "description": "Reasoning model from DeepSeek"},
-        {"id": "ollama/mistral", "name": "Ollama Mistral", "description": "Local model"},
-        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet", "description": "Anthropic model"},
+        {
+            "id": "gpt-4-turbo",
+            "name": "GPT-4 Turbo",
+            "description": "Fast and powerful",
+        },
+        {
+            "id": "gpt-4.1-mini",
+            "name": "GPT-4.1 Mini",
+            "description": "Lightweight and efficient",
+        },
+        {
+            "id": "gpt-4.1-nano",
+            "name": "GPT-4.1 Nano",
+            "description": "Ultra-lightweight model",
+        },
+        {
+            "id": "gpt-4o-mini",
+            "name": "GPT-4o Mini",
+            "description": "Efficient and cost-effective",
+        },
+        {
+            "id": "deepseek/deepseek-chat",
+            "name": "DeepSeek Chat",
+            "description": "Fast chat model from DeepSeek",
+        },
+        {
+            "id": "deepseek/deepseek-reasoner",
+            "name": "DeepSeek Reasoner",
+            "description": "Reasoning model from DeepSeek",
+        },
+        {
+            "id": "ollama/mistral",
+            "name": "Ollama Mistral",
+            "description": "Local model",
+        },
+        {
+            "id": "claude-sonnet-4-20250514",
+            "name": "Claude Sonnet 4",
+            "description": "Anthropic model",
+        },
+        {
+            "id": "claude-3-5-haiku-20241022",
+            "name": "Claude 3.5 Haiku",
+            "description": "Fast Anthropic model",
+        },
     ],
 }
 
