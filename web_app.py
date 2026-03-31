@@ -384,7 +384,7 @@ def run_agent_stream():
                                 try:
                                     proc.kill()
                                     proc.wait(timeout=1)
-                                except:
+                                except Exception:
                                     pass
 
                     # Mark session as interrupted in DB
@@ -440,7 +440,6 @@ def stop_session(session_id):
             return jsonify({"success": False, "message": "Session not found"}), 404
 
         agent_pid = session_data["agent_pid"]
-        worker_pid = session_data["worker_pid"]
         run_mode = session_data.get("run_mode", "background")
 
         # Mark session as stopped in DB before killing processes

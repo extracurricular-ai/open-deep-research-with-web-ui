@@ -16,7 +16,11 @@ from serpapi import GoogleSearch
 from smolagents import Tool
 
 from .cookies import COOKIES
-from .mdconvert import FileConversionException, MarkdownConverter, UnsupportedFormatException
+from .mdconvert import (
+    FileConversionException,
+    MarkdownConverter,
+    UnsupportedFormatException,
+)
 
 
 class SimpleTextBrowser:
@@ -60,7 +64,9 @@ class SimpleTextBrowser:
         if uri_or_path == "about:blank":
             self._set_page_content("")
         elif uri_or_path.startswith("google:"):
-            self._serpapi_search(uri_or_path[len("google:") :].strip(), filter_year=filter_year)
+            self._serpapi_search(
+                uri_or_path[len("google:") :].strip(), filter_year=filter_year
+            )
         else:
             if (
                 not uri_or_path.startswith("http:")
@@ -97,7 +103,9 @@ class SimpleTextBrowser:
             self.viewport_current_page = len(self.viewport_pages) - 1
 
     def page_down(self) -> None:
-        self.viewport_current_page = min(self.viewport_current_page + 1, len(self.viewport_pages) - 1)
+        self.viewport_current_page = min(
+            self.viewport_current_page + 1, len(self.viewport_pages) - 1
+        )
 
     def page_up(self) -> None:
         self.viewport_current_page = max(self.viewport_current_page - 1, 0)
@@ -107,7 +115,10 @@ class SimpleTextBrowser:
 
         # Did we get here via a previous find_on_page search with the same query?
         # If so, map to find_next
-        if query == self._find_on_page_query and self.viewport_current_page == self._find_on_page_last_result:
+        if (
+            query == self._find_on_page_query
+            and self.viewport_current_page == self._find_on_page_last_result
+        ):
             return self.find_next()
 
         # Ok it's a new search start from the current viewport
@@ -135,7 +146,9 @@ class SimpleTextBrowser:
             if starting_viewport >= len(self.viewport_pages):
                 starting_viewport = 0
 
-        viewport_match = self._find_next_viewport(self._find_on_page_query, starting_viewport)
+        viewport_match = self._find_next_viewport(
+            self._find_on_page_query, starting_viewport
+        )
         if viewport_match is None:
             self._find_on_page_last_result = None
             return None
@@ -153,7 +166,9 @@ class SimpleTextBrowser:
         # Normalize the query, and convert to a regular expression
         nquery = re.sub(r"\*", "__STAR__", query)
         nquery = " " + (" ".join(re.split(r"\W+", nquery))).strip() + " "
-        nquery = nquery.replace(" __STAR__ ", "__STAR__ ")  # Merge isolated stars with prior word
+        nquery = nquery.replace(
+            " __STAR__ ", "__STAR__ "
+        )  # Merge isolated stars with prior word
         nquery = nquery.replace("__STAR__", ".*").lower()
 
         if nquery.strip() == "":
@@ -196,7 +211,9 @@ class SimpleTextBrowser:
         while start_idx < len(self._page_content):
             end_idx = min(start_idx + self.viewport_size, len(self._page_content))  # type: ignore[operator]
             # Adjust to end on a space
-            while end_idx < len(self._page_content) and self._page_content[end_idx - 1] not in [" ", "\t", "\r", "\n"]:
+            while end_idx < len(self._page_content) and self._page_content[
+                end_idx - 1
+            ] not in [" ", "\t", "\r", "\n"]:
                 end_idx += 1
             self.viewport_pages.append((start_idx, end_idx))
             start_idx = end_idx
@@ -211,15 +228,21 @@ class SimpleTextBrowser:
             "api_key": self.serpapi_key,
         }
         if filter_year is not None:
-            params["tbs"] = f"cdr:1,cd_min:01/01/{filter_year},cd_max:12/31/{filter_year}"
+            params["tbs"] = (
+                f"cdr:1,cd_min:01/01/{filter_year},cd_max:12/31/{filter_year}"
+            )
 
         search = GoogleSearch(params)
         results = search.get_dict()
         self.page_title = f"{query} - Search"
         if "organic_results" not in results.keys():
-            raise Exception(f"No results found for query: '{query}'. Use a less specific query.")
+            raise Exception(
+                f"No results found for query: '{query}'. Use a less specific query."
+            )
         if len(results["organic_results"]) == 0:
-            year_filter_message = f" with filter year={filter_year}" if filter_year is not None else ""
+            year_filter_message = (
+                f" with filter year={filter_year}" if filter_year is not None else ""
+            )
             self._set_page_content(
                 f"No results found for '{query}'{year_filter_message}. Try with a more general query, or remove the year filter."
             )
@@ -250,7 +273,9 @@ class SimpleTextBrowser:
 
                 redacted_version = f"{idx}. [{page['title']}]({page['link']}){date_published}{source}\n{_prev_visit(page['link'])}{snippet}"
 
-                redacted_version = redacted_version.replace("Your browser can't play this video.", "")
+                redacted_version = redacted_version.replace(
+                    "Your browser can't play this video.", ""
+                )
                 web_snippets.append(redacted_version)
 
         content = (
@@ -270,7 +295,11 @@ class SimpleTextBrowser:
                 self._set_page_content(res.text_content)
             else:
                 # Prepare the request parameters
-                request_kwargs = self.request_kwargs.copy() if self.request_kwargs is not None else {}
+                request_kwargs = (
+                    self.request_kwargs.copy()
+                    if self.request_kwargs is not None
+                    else {}
+                )
                 request_kwargs["stream"] = True
 
                 # Send a HTTP request to the URL
@@ -291,15 +320,21 @@ class SimpleTextBrowser:
                     fname = None
                     download_path = None
                     try:
-                        fname = pathvalidate.sanitize_filename(os.path.basename(urlparse(url).path)).strip()
-                        download_path = os.path.abspath(os.path.join(self.downloads_folder, fname))
+                        fname = pathvalidate.sanitize_filename(
+                            os.path.basename(urlparse(url).path)
+                        ).strip()
+                        download_path = os.path.abspath(
+                            os.path.join(self.downloads_folder, fname)
+                        )
 
                         suffix = 0
                         while os.path.exists(download_path) and suffix < 1000:
                             suffix += 1
                             base, ext = os.path.splitext(fname)
                             new_fname = f"{base}__{suffix}{ext}"
-                            download_path = os.path.abspath(os.path.join(self.downloads_folder, new_fname))
+                            download_path = os.path.abspath(
+                                os.path.join(self.downloads_folder, new_fname)
+                            )
 
                     except NameError:
                         pass
@@ -310,7 +345,9 @@ class SimpleTextBrowser:
                         if extension is None:
                             extension = ".download"
                         fname = str(uuid.uuid4()) + extension
-                        download_path = os.path.abspath(os.path.join(self.downloads_folder, fname))
+                        download_path = os.path.abspath(
+                            os.path.join(self.downloads_folder, fname)
+                        )
 
                     # Open a file for writing
                     with open(download_path, "wb") as fh:
@@ -324,11 +361,15 @@ class SimpleTextBrowser:
         except UnsupportedFormatException as e:
             print(e)
             self.page_title = ("Download complete.",)
-            self._set_page_content(f"# Download complete\n\nSaved file to '{download_path}'")
+            self._set_page_content(
+                f"# Download complete\n\nSaved file to '{download_path}'"
+            )
         except FileConversionException as e:
             print(e)
             self.page_title = ("Download complete.",)
-            self._set_page_content(f"# Download complete\n\nSaved file to '{download_path}'")
+            self._set_page_content(
+                f"# Download complete\n\nSaved file to '{download_path}'"
+            )
         except FileNotFoundError:
             self.page_title = "Error 404"
             self._set_page_content(f"## Error 404\n\nFile not found: {download_path}")
@@ -341,10 +382,14 @@ class SimpleTextBrowser:
                 if content_type is not None and "text/html" in content_type.lower():
                     res = self._mdconvert.convert(response)
                     self.page_title = f"Error {response.status_code}"
-                    self._set_page_content(f"## Error {response.status_code}\n\n{res.text_content}")
+                    self._set_page_content(
+                        f"## Error {response.status_code}\n\n{res.text_content}"
+                    )
                 else:
                     text = ""
-                    for chunk in response.iter_content(chunk_size=512, decode_unicode=True):
+                    for chunk in response.iter_content(
+                        chunk_size=512, decode_unicode=True
+                    ):
                         text += chunk
                     self.page_title = f"Error {response.status_code}"
                     self._set_page_content(f"## Error {response.status_code}\n\n{text}")
@@ -366,14 +411,18 @@ class SimpleTextBrowser:
                 header += f"You previously visited this page {round(time.time() - self.history[i][1])} seconds ago.\n"
                 break
 
-        header += f"Viewport position: Showing page {current_page + 1} of {total_pages}.\n"
+        header += (
+            f"Viewport position: Showing page {current_page + 1} of {total_pages}.\n"
+        )
         return (header, self.viewport)
 
 
 class SearchInformationTool(Tool):
     name = "web_search"
     description = "Perform a web search query (think a google search) and returns the search results."
-    inputs = {"query": {"type": "string", "description": "The web search query to perform."}}
+    inputs = {
+        "query": {"type": "string", "description": "The web search query to perform."}
+    }
     inputs["filter_year"] = {
         "type": "string",
         "description": "[Optional parameter]: filter the search results to only include pages from a specific year. For example, '2020' will only include pages from 2020. Make sure to use this parameter if you're trying to search for articles from a specific date!",
@@ -394,7 +443,12 @@ class SearchInformationTool(Tool):
 class VisitTool(Tool):
     name = "visit_page"
     description = "Visit a webpage at a given URL and return its text. Given a url to a YouTube video, this returns the transcript."
-    inputs = {"url": {"type": "string", "description": "The relative or absolute url of the webpage to visit."}}
+    inputs = {
+        "url": {
+            "type": "string",
+            "description": "The relative or absolute url of the webpage to visit.",
+        }
+    }
     output_type = "string"
 
     def __init__(self, browser=None):
@@ -413,7 +467,12 @@ class DownloadTool(Tool):
 Download a file at a given URL. The file should be of this format: [".xlsx", ".pptx", ".wav", ".mp3", ".m4a", ".png", ".docx"]
 After using this tool, for further inspection of this page you should return the download path to your manager via final_answer, and they will be able to inspect it.
 DO NOT use this tool for .pdf or .txt or .htm files: for these types of files use visit_page with the file url instead."""
-    inputs = {"url": {"type": "string", "description": "The relative or absolute url of the file to be downloaded."}}
+    inputs = {
+        "url": {
+            "type": "string",
+            "description": "The relative or absolute url of the file to be downloaded.",
+        }
+    }
     output_type = "string"
 
     def __init__(self, browser):
@@ -437,7 +496,9 @@ DO NOT use this tool for .pdf or .txt or .htm files: for these types of files us
             f.write(response.content)
 
         if "pdf" in extension or "txt" in extension or "htm" in extension:
-            raise Exception("Do not use this tool for pdf or txt or html files: use visit_page instead.")
+            raise Exception(
+                "Do not use this tool for pdf or txt or html files: use visit_page instead."
+            )
 
         return f"File was downloaded and saved under path {new_path}."
 
@@ -465,15 +526,23 @@ class ArchiveSearchTool(Tool):
         archive_url = no_timestamp_url + f"&timestamp={date}"
         response = requests.get(archive_url).json()
         response_notimestamp = requests.get(no_timestamp_url).json()
-        if "archived_snapshots" in response and "closest" in response["archived_snapshots"]:
+        if (
+            "archived_snapshots" in response
+            and "closest" in response["archived_snapshots"]
+        ):
             closest = response["archived_snapshots"]["closest"]
             print("Archive found!", closest)
 
-        elif "archived_snapshots" in response_notimestamp and "closest" in response_notimestamp["archived_snapshots"]:
+        elif (
+            "archived_snapshots" in response_notimestamp
+            and "closest" in response_notimestamp["archived_snapshots"]
+        ):
             closest = response_notimestamp["archived_snapshots"]["closest"]
             print("Archive found!", closest)
         else:
-            raise Exception(f"Your {url=} was not archived on Wayback Machine, try a different url.")
+            raise Exception(
+                f"Your {url=} was not archived on Wayback Machine, try a different url."
+            )
         target_url = closest["url"]
         self.browser.visit_page(target_url)
         header, content = self.browser._state()
@@ -503,9 +572,7 @@ class PageUpTool(Tool):
 
 class PageDownTool(Tool):
     name = "page_down"
-    description = (
-        "Scroll the viewport DOWN one page-length in the current webpage and return the new viewport content."
-    )
+    description = "Scroll the viewport DOWN one page-length in the current webpage and return the new viewport content."
     inputs = {}
     output_type = "string"
 
@@ -562,6 +629,9 @@ class FindNextTool(Tool):
         header, content = self.browser._state()
 
         if find_result is None:
-            return header.strip() + "\n=======================\nThe search string was not found on this page."
+            return (
+                header.strip()
+                + "\n=======================\nThe search string was not found on this page."
+            )
         else:
             return header.strip() + "\n=======================\n" + content

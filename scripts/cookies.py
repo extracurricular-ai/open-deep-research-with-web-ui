@@ -1,6 +1,5 @@
 from requests.cookies import RequestsCookieJar
 
-
 COOKIES_LIST = [
     {
         "domain": ".youtube.com",
@@ -712,4 +711,6 @@ COOKIES = RequestsCookieJar()
 
 # Add cookies to the jar
 for cookie in COOKIES_LIST:
-    COOKIES.set(cookie["name"], cookie["value"], domain=cookie["domain"], path=cookie["path"])
+    COOKIES.set(
+        cookie["name"], cookie["value"], domain=cookie["domain"], path=cookie["path"]
+    )

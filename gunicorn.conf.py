@@ -19,7 +19,7 @@ proc_name = "open_deep_research"
 
 # Logging
 accesslog = "-"  # Log to stdout
-errorlog = "-"   # Log to stderr
+errorlog = "-"  # Log to stderr
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
 
@@ -35,26 +35,32 @@ tmp_upload_dir = None
 # keyfile = "/path/to/keyfile"
 # certfile = "/path/to/certfile"
 
+
 # Server hooks
 def on_starting(server):
     """Called just before the master process is initialized."""
     print("Gunicorn server starting...")
 
+
 def on_reload(server):
     """Called to recycle workers during a reload via SIGHUP."""
     print("Gunicorn reloading...")
+
 
 def when_ready(server):
     """Called just after the server is started."""
     print(f"Gunicorn ready. Workers: {workers}, Bind: {bind}")
 
+
 def pre_fork(server, worker):
     """Called just before a worker is forked."""
     pass
 
+
 def post_fork(server, worker):
     """Called just after a worker has been forked."""
     print(f"Worker spawned (pid: {worker.pid})")
+
 
 def worker_exit(server, worker):
     """Called just after a worker has been exited."""

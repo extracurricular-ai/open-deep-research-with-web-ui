@@ -35,7 +35,9 @@ This tool handles the following file extensions: [".html", ".htm", ".xlsx", ".pp
         result = self.md_converter.convert(file_path)
 
         if file_path[-4:] in [".png", ".jpg"]:
-            raise Exception("Cannot use inspect_file_as_text tool with images: use visualizer instead!")
+            raise Exception(
+                "Cannot use inspect_file_as_text tool with images: use visualizer instead!"
+            )
 
         if ".zip" in file_path:
             return result.text_content
@@ -79,7 +81,9 @@ This tool handles the following file extensions: [".html", ".htm", ".xlsx", ".pp
         result = self.md_converter.convert(file_path)
 
         if file_path[-4:] in [".png", ".jpg"]:
-            raise Exception("Cannot use inspect_file_as_text tool with images: use visualizer instead!")
+            raise Exception(
+                "Cannot use inspect_file_as_text tool with images: use visualizer instead!"
+            )
 
         if ".zip" in file_path:
             return result.text_content

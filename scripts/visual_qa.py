@@ -12,7 +12,6 @@ from huggingface_hub import InferenceClient
 
 from smolagents import Tool, tool
 
-
 load_dotenv(override=True)
 
 
@@ -28,8 +27,12 @@ def process_images_and_text(image_path, query, client):
             ],
         },
     ]
-    idefics_processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b-chatty")
-    prompt_with_template = idefics_processor.apply_chat_template(messages, add_generation_prompt=True)
+    idefics_processor = AutoProcessor.from_pretrained(
+        "HuggingFaceM4/idefics2-8b-chatty"
+    )
+    prompt_with_template = idefics_processor.apply_chat_template(
+        messages, add_generation_prompt=True
+    )
 
     # load images from local directory
 
@@ -40,7 +43,9 @@ def process_images_and_text(image_path, query, client):
 
         # Convert the image to a base64 string
         buffer = BytesIO()
-        image.save(buffer, format="JPEG")  # Use the appropriate format (e.g., JPEG, PNG)
+        image.save(
+            buffer, format="JPEG"
+        )  # Use the appropriate format (e.g., JPEG, PNG)
         base64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
         # add string formatting required by the endpoint
@@ -49,7 +54,9 @@ def process_images_and_text(image_path, query, client):
         return image_string
 
     image_string = encode_local_image(image_path)
-    prompt_with_images = prompt_with_template.replace("<image>", "![]({}) ").format(image_string)
+    prompt_with_images = prompt_with_template.replace("<image>", "![]({}) ").format(
+        image_string
+    )
 
     payload = {
         "inputs": prompt_with_images,
@@ -110,7 +117,11 @@ class VisualQATool(Tool):
             "description": "The path to the image on which to answer the question",
             "type": "string",
         },
-        "question": {"description": "the question to answer", "type": "string", "nullable": True},
+        "question": {
+            "description": "the question to answer",
+            "type": "string",
+            "nullable": True,
+        },
     }
     output_type = "string"
 
@@ -131,9 +142,7 @@ class VisualQATool(Tool):
                 output = process_images_and_text(new_image_path, question, self.client)
 
         if add_note:
-            output = (
-                f"You did not provide a particular question, so here is a detailed caption for the image: {output}"
-            )
+            output = f"You did not provide a particular question, so here is a detailed caption for the image: {output}"
 
         return output
 
@@ -158,7 +167,9 @@ def visualizer(image_path: str, question: str | None = None) -> str:
         add_note = True
         question = "Please write a detailed caption for this image."
     if not isinstance(image_path, str):
-        raise Exception("You should provide at least `image_path` string argument to this tool!")
+        raise Exception(
+            "You should provide at least `image_path` string argument to this tool!"
+        )
 
     mime_type, _ = mimetypes.guess_type(image_path)
     base64_image = encode_image(image_path)
@@ -170,14 +181,22 @@ def visualizer(image_path: str, question: str | None = None) -> str:
                 "role": "user",
                 "content": [
                     {"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{base64_image}"},
+                    },
                 ],
             }
         ],
         "max_tokens": 1000,
     }
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+    }
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions", headers=headers, json=payload
+    )
     try:
         output = response.json()["choices"][0]["message"]["content"]
     except Exception:

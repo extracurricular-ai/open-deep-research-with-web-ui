@@ -653,7 +653,6 @@ def main():
     # Build config: start from server config, override with CLI-passed config
     cfg = load_config()
     if args.config_json:
-        import copy
         from config import _deep_merge
 
         cli_cfg = json.loads(args.config_json)
@@ -667,7 +666,9 @@ def main():
     global _truncate
     max_field = cfg["limits"]["max_field_length"]
     _orig_truncate = _truncate
-    _truncate = lambda s, max_len=max_field: _orig_truncate(s, max_len)
+
+    def _truncate(s, max_len=max_field):
+        return _orig_truncate(s, max_len)
 
     agent = create_agent(cfg)
 
