@@ -32,6 +32,7 @@ from smolagents import (
     ToolCallingAgent,
 )
 from scripts.anthropic_model import AnthropicModel
+from scripts.model_routing import get_model_routing
 
 # --- JSON protocol for structured output ---
 # Save real stdout for JSON events, redirect sys.stdout to stderr
@@ -371,13 +372,14 @@ def _find_search_provider_key(cfg, provider_name):
 def _find_model_provider(cfg, model_id):
     """Find api_key and base_url for a model_id from model.providers.
 
-    Matches model_id prefix (e.g. 'deepseek/deepseek-chat' -> 'deepseek')
-    to provider name. Models without a prefix (e.g. 'o1', 'gpt-4o') match 'openai'.
+    Uses get_model_routing() to resolve the provider, then looks up
+    credentials from the matching provider entry in config.
     """
     providers = cfg["model"].get("providers", [])
-    prefix = model_id.split("/")[0] if "/" in model_id else "openai"
+    routing = get_model_routing(model_id)
+    provider_name = routing["provider"]
     for p in providers:
-        if p.get("provider", "").lower() == prefix.lower():
+        if p.get("provider", "").lower() == provider_name.lower():
             return p.get("api_key") or None, p.get("base_url") or None
     return None, None
 
@@ -452,26 +454,6 @@ def get_search_tools(cfg):
     return [DuckDuckGoSearchToolLabeled(max_results=max_results)]
 
 
-def _get_model_routing(model_id: str) -> dict:
-    """Return provider and bare model ID based on model name prefix.
-
-    Routing rules:
-      - claude-*     -> anthropic
-      - deepseek-*   -> deepseek (OpenAI-compatible, custom base)
-      - default      -> openai
-    """
-    bare = model_id.split("/", 1)[1] if "/" in model_id else model_id
-    if bare.startswith("claude"):
-        return {"provider": "anthropic", "bare_id": bare}
-    if bare.startswith("deepseek"):
-        return {
-            "provider": "deepseek",
-            "bare_id": bare,
-            "api_base": "https://api.deepseek.com/v1",
-        }
-    return {"provider": "openai", "bare_id": bare}
-
-
 def _patch_model_retrier(model, cfg):
     """Override smolagents' default retrier to also retry on connection errors, not just rate limits."""
     from smolagents.utils import Retrying
@@ -515,7 +497,7 @@ def create_agent(cfg):
     api_key, base_url = _find_model_provider(cfg, model_id)
 
     # Route to correct SDK based on model name
-    routing = _get_model_routing(model_id)
+    routing = get_model_routing(model_id)
 
     if routing["provider"] == "anthropic":
         api_key = api_key or os.getenv("ANTHROPIC_API_KEY")

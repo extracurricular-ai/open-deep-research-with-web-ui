@@ -39,6 +39,7 @@ from smolagents import (
     ToolCallingAgent,
 )
 from scripts.anthropic_model import AnthropicModel
+from scripts.model_routing import get_model_routing
 
 
 class TavilySearchTool(Tool):
@@ -233,20 +234,20 @@ def answer_single_question(
     visual_inspection_tool: TextInspectorTool,
 ) -> None:
     # Route to correct SDK based on model name
-    bare_id = model_id.split("/", 1)[1] if "/" in model_id else model_id
-    if bare_id.startswith("claude"):
+    routing = get_model_routing(model_id)
+    if routing["provider"] == "anthropic":
         model = AnthropicModel(
-            model_id=bare_id,
+            model_id=routing["bare_id"],
             custom_role_conversions=custom_role_conversions,
             max_tokens=8192 if model_id == "o1" else 4096,
         )
     else:
         model_params: dict[str, Any] = {
-            "model_id": bare_id,
+            "model_id": routing["bare_id"],
             "custom_role_conversions": custom_role_conversions,
         }
-        if bare_id.startswith("deepseek"):
-            model_params["api_base"] = "https://api.deepseek.com/v1"
+        if routing.get("api_base"):
+            model_params["api_base"] = routing["api_base"]
         if model_id == "o1":
             model_params["reasoning_effort"] = "high"
             model_params["max_completion_tokens"] = 8192
