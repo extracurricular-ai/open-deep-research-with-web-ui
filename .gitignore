@@ -137,3 +137,4 @@ dmypy.json
 *.swo
 *~
 .DS_Store
+.claude
