@@ -203,6 +203,7 @@ cp .env.example .env
 | `CONFIG_ADMIN_PASSWORD` | Contraseña para cambios de configuración del lado del servidor |
 | `META_SOTA_API_KEY` | Clave API para búsqueda MetaSo |
 | `SERPAPI_API_KEY` | Clave API para búsqueda SerpAPI |
+| `BOCHA_API_KEY` | Clave API para búsqueda Bocha AI (博查) |
 | `DEBUG` | Habilitar registro de depuración (`False` por defecto) |
 | `LOG_LEVEL` | Verbosidad del registro (`INFO` por defecto) |
 
@@ -231,6 +232,7 @@ python run.py --model-id "ollama/mistral" "Tu pregunta"  # modelo local
 | `DDGS` | No | Por defecto, DuckDuckGo gratuito |
 | `META_SOTA` | Sí | MetaSo, a menudo mejor para consultas en chino |
 | `SERPAPI` | Sí | Google a través de SerpAPI |
+| `BOCHA` | Sí | Bocha AI (博查), búsqueda web optimizada para chino |
 
 Se pueden configurar múltiples motores con replegamiento automático — el agente los prueba en orden.
 

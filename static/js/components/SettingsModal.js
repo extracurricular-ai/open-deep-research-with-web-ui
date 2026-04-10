@@ -10,6 +10,7 @@ const SEARCH_PROVIDER_DEFS = [
     { id: 'DDGS', label: 'DuckDuckGo', needsKey: false },
     { id: 'SERPAPI', label: 'SerpAPI', needsKey: true },
     { id: 'META_SOTA', label: 'MetaSo', needsKey: true },
+    { id: 'BOCHA', label: 'Bocha AI', needsKey: true },
 ];
 
 // Well-known providers that use standard endpoints (no custom base URL needed)

@@ -39,6 +39,7 @@ DEFAULTS = {
             {"provider": "TAVILY", "key": ""},
             {"provider": "SERPAPI", "key": ""},
             {"provider": "META_SOTA", "key": ""},
+            {"provider": "BOCHA", "key": ""},
         ],
         "max_results": 10,
     },

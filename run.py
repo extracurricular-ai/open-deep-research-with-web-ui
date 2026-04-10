@@ -336,6 +336,67 @@ class MetaSotaSearchTool(Tool):
             return f"Unexpected error: {str(e)}"
 
 
+class BochaSearchTool(Tool):
+    name = "web_search"
+    description = "Search the web using Bocha AI (博查) search engine. Returns search results with title, link, and snippet."
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "The search query to look up on the web",
+        }
+    }
+    output_type = "string"
+
+    def __init__(self, api_key: str, max_results: int = 10, **kwargs):
+        super().__init__(**kwargs)
+        self.api_key = api_key
+        self.max_results = max_results
+        self.api_url = "https://api.bocha.cn/v1/web-search"
+
+    def forward(self, query: str) -> str:
+        """Search the web using Bocha AI API"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "query": query,
+            "freshness": "noLimit",
+            "summary": True,
+            "count": min(max(self.max_results, 1), 50),
+        }
+
+        try:
+            response = requests.post(
+                self.api_url, headers=headers, json=payload, timeout=30
+            )
+            response.raise_for_status()
+            body = response.json()
+
+            if body.get("code") not in (200, None):
+                return f"Bocha search error: {body.get('msg') or body.get('message') or body}"
+
+            data = body.get("data") or {}
+            web_pages = (data.get("webPages") or {}).get("value") or []
+            if not web_pages:
+                return "No results found."
+
+            results = []
+            for item in web_pages[: self.max_results]:
+                title = item.get("name", "No title")
+                url = item.get("url", "")
+                snippet = item.get("summary") or item.get("snippet") or "No description"
+                results.append(f"|{title}]({url})\n{snippet}\n")
+
+            return "## Search Results (Bocha AI)\n\n" + "\n".join(results)
+
+        except requests.exceptions.RequestException as e:
+            return f"Error performing search: {str(e)}"
+        except Exception as e:
+            return f"Unexpected error: {str(e)}"
+
+
 append_answer_lock = threading.Lock()
 
 
@@ -440,6 +501,16 @@ def get_search_tools(cfg):
                 continue
             emit_event("info", content="Using MetaSo search engine")
             return [MetaSotaSearchTool(api_key=api_key, max_results=max_results)]
+        elif engine == "BOCHA":
+            api_key = key or os.getenv("BOCHA_API_KEY")
+            if not api_key:
+                emit_event(
+                    "info",
+                    content="BOCHA API key not configured, trying next provider",
+                )
+                continue
+            emit_event("info", content="Using Bocha AI search engine")
+            return [BochaSearchTool(api_key=api_key, max_results=max_results)]
         elif engine == "SERPAPI":
             # SERPAPI is used via browser config, not as a standalone search tool
             continue

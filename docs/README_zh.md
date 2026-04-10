@@ -203,6 +203,7 @@ cp .env.example .env
 | `CONFIG_ADMIN_PASSWORD` | 服务器端配置更改密码 |
 | `META_SOTA_API_KEY` | MetaSo 搜索的 API 密钥 |
 | `SERPAPI_API_KEY` | SerpAPI 搜索的 API 密钥 |
+| `BOCHA_API_KEY` | 博查 AI（Bocha）搜索的 API 密钥 |
 | `DEBUG` | 启用调试日志（默认 `False`） |
 | `LOG_LEVEL` | 日志详细程度（默认 `INFO`） |
 
@@ -231,6 +232,7 @@ python run.py --model-id "ollama/mistral" "你的问题"  # 本地模型
 | `DDGS` | 否 | 默认，免费 DuckDuckGo |
 | `META_SOTA` | 是 | MetaSo，对中文查询效果更好 |
 | `SERPAPI` | 是 | 通过 SerpAPI 使用 Google |
+| `BOCHA` | 是 | 博查 AI（Bocha），针对中文优化的网页搜索 |
 
 可配置多个引擎并自动降级 —— 智能体按顺序尝试。
 

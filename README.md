@@ -205,6 +205,7 @@ cp .env.example .env
 | `CONFIG_ADMIN_PASSWORD` | Password for server-side config changes |
 | `META_SOTA_API_KEY` | API key for MetaSo search |
 | `SERPAPI_API_KEY` | API key for SerpAPI search |
+| `BOCHA_API_KEY` | API key for Bocha AI (博查) search |
 | `DEBUG` | Enable debug logging (`False` by default) |
 | `LOG_LEVEL` | Log verbosity (`INFO` by default) |
 
@@ -233,6 +234,7 @@ python run.py --model-id "ollama/mistral" "Your question"  # local model
 | `DDGS` | No | Default, free DuckDuckGo |
 | `META_SOTA` | Yes | MetaSo, often better for Chinese queries |
 | `SERPAPI` | Yes | Google via SerpAPI |
+| `BOCHA` | Yes | Bocha AI (博查), Chinese-optimized web search |
 
 Multiple engines can be configured with automatic fallback — the agent tries them in order.
 
