@@ -274,6 +274,100 @@ class TavilySearchTool(Tool):
             return f"Error performing search: {str(e)}"
 
 
+class ExaSearchTool(Tool):
+    name = "web_search"
+    description = "Search the web using Exa AI-powered search engine. Returns search results with title, link, and content snippets extracted by an AI index."
+    inputs = {
+        "query": {
+            "type": "string",
+            "description": "The search query to look up on the web",
+        }
+    }
+    output_type = "string"
+
+    def __init__(
+        self,
+        api_key: str,
+        max_results: int = 10,
+        search_type: str = "auto",
+        category: str | None = None,
+        include_domains: list | None = None,
+        exclude_domains: list | None = None,
+        start_published_date: str | None = None,
+        end_published_date: str | None = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        from exa_py import Exa
+
+        self.client = Exa(api_key=api_key)
+        self.client.headers["x-exa-integration"] = "open-deep-research-with-web-ui"
+        self.max_results = max_results
+        self.search_type = search_type
+        self.category = category
+        self.include_domains = include_domains
+        self.exclude_domains = exclude_domains
+        self.start_published_date = start_published_date
+        self.end_published_date = end_published_date
+
+    def forward(self, query: str) -> str:
+        """Search the web using Exa API"""
+        try:
+            search_kwargs = {
+                "query": query,
+                "num_results": self.max_results,
+                "type": self.search_type,
+                "text": {"max_characters": 1000},
+                "highlights": {"num_sentences": 3, "highlights_per_url": 3},
+            }
+            if self.category:
+                search_kwargs["category"] = self.category
+            if self.include_domains:
+                search_kwargs["include_domains"] = self.include_domains
+            if self.exclude_domains:
+                search_kwargs["exclude_domains"] = self.exclude_domains
+            if self.start_published_date:
+                search_kwargs["start_published_date"] = self.start_published_date
+            if self.end_published_date:
+                search_kwargs["end_published_date"] = self.end_published_date
+
+            response = self.client.search_and_contents(**search_kwargs)
+
+            results_list = getattr(response, "results", []) or []
+            if not results_list:
+                return "No results found."
+
+            results = []
+            for item in results_list[: self.max_results]:
+                title = getattr(item, "title", None) or "No title"
+                url = getattr(item, "url", "") or ""
+                snippet = _extract_exa_snippet(item)
+                results.append(f"|{title}]({url})\n{snippet}\n")
+
+            return "## Search Results (Exa)\n\n" + "\n".join(results)
+
+        except Exception as e:
+            return f"Error performing search: {str(e)}"
+
+
+def _extract_exa_snippet(item) -> str:
+    """Build a snippet from whatever content fields Exa returned.
+
+    Cascades through highlights -> summary -> text so a missing field doesn't
+    leave the agent with an empty result.
+    """
+    highlights = getattr(item, "highlights", None)
+    if highlights:
+        return " ... ".join(highlights)
+    summary = getattr(item, "summary", None)
+    if summary:
+        return summary
+    text = getattr(item, "text", None)
+    if text:
+        return text[:1000]
+    return "No description"
+
+
 class MetaSotaSearchTool(Tool):
     name = "web_search"
     description = "Search the web using MetaSo search engine. Returns search results with title, link, and snippet."
@@ -491,6 +585,16 @@ def get_search_tools(cfg):
                 continue
             emit_event("info", content="Using Tavily search engine")
             return [TavilySearchTool(api_key=api_key, max_results=max_results)]
+        elif engine == "EXA":
+            api_key = key or os.getenv("EXA_API_KEY")
+            if not api_key:
+                emit_event(
+                    "info",
+                    content="EXA API key not configured, trying next provider",
+                )
+                continue
+            emit_event("info", content="Using Exa search engine")
+            return [ExaSearchTool(api_key=api_key, max_results=max_results)]
         elif engine == "META_SOTA":
             api_key = key or os.getenv("META_SOTA_API_KEY")
             if not api_key:

@@ -203,6 +203,7 @@ cp .env.example .env
 |---|---|
 | `ENABLE_CONFIG_UI` | Enable admin config UI via web (`false` by default) |
 | `CONFIG_ADMIN_PASSWORD` | Password for server-side config changes |
+| `EXA_API_KEY` | API key for Exa AI-powered search |
 | `META_SOTA_API_KEY` | API key for MetaSo search |
 | `SERPAPI_API_KEY` | API key for SerpAPI search |
 | `BOCHA_API_KEY` | API key for Bocha AI (博查) search |
@@ -232,6 +233,7 @@ python run.py --model-id "ollama/mistral" "Your question"  # local model
 | Engine | Key Required | Notes |
 |---|---|---|
 | `DDGS` | No | Default, free DuckDuckGo |
+| `EXA` | Yes | Exa AI-powered search with content extraction |
 | `META_SOTA` | Yes | MetaSo, often better for Chinese queries |
 | `SERPAPI` | Yes | Google via SerpAPI |
 | `BOCHA` | Yes | Bocha AI (博查), Chinese-optimized web search |
