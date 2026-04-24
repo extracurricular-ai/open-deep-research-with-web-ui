@@ -37,6 +37,7 @@ DEFAULTS = {
         "providers": [
             {"provider": "DDGS", "key": ""},
             {"provider": "TAVILY", "key": ""},
+            {"provider": "EXA", "key": ""},
             {"provider": "SERPAPI", "key": ""},
             {"provider": "META_SOTA", "key": ""},
             {"provider": "BOCHA", "key": ""},
