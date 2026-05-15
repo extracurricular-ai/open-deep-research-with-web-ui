@@ -33,6 +33,16 @@
     "text_limit": 100000,
     "max_field_length": 50000
   },
+  "compaction": {
+    "enabled": true,
+    "summarizer_model_id": null,
+    "summary_threshold_tokens": 1000,
+    "summary_max_tokens": 600,
+    "summary_input_cap_tokens": 6000,
+    "plan_keep_back": 3,
+    "gap_summary_max_tokens": 500,
+    "max_retries": 10
+  },
   "other_keys": {
     "hf_token": ""
   },

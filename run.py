@@ -32,6 +32,7 @@ from smolagents import (
     ToolCallingAgent,
 )
 from scripts.anthropic_model import AnthropicModel
+from scripts.compaction import make_per_step_summarizer, make_plan_consolidator
 from scripts.model_routing import get_model_routing, get_model_max_output_tokens
 
 # --- JSON protocol for structured output ---
@@ -609,6 +610,40 @@ def create_agent(cfg):
 
     model = _patch_model_retrier(model, cfg)
 
+    # Build the step_callbacks dict. If compaction is enabled, layer the
+    # summarizer (ActionStep) and consolidator (PlanningStep) on top of the
+    # existing event-emitting callbacks. Both manager and search_agent share
+    # this same dict — manager's per-step observations are tiny (sub-agent
+    # final answers) so the per-step summarizer mostly no-ops there; the
+    # plan consolidator helps both.
+    cmp_cfg = cfg.get("compaction") or {}
+    if cmp_cfg.get("enabled", True):
+        # summarizer_model_id override is not yet wired (would require
+        # constructing a second model). For now always use the main model,
+        # which matches the user-selected design.
+        summarizer_cb = make_per_step_summarizer(
+            model=model,
+            main_model_id=model_id,
+            threshold_tokens=cmp_cfg.get("summary_threshold_tokens", 1000),
+            summary_max_tokens=cmp_cfg.get("summary_max_tokens", 600),
+            summary_input_cap_tokens=cmp_cfg.get("summary_input_cap_tokens", 6000),
+            max_retries=cmp_cfg.get("max_retries", 10),
+        )
+        consolidator_cb = make_plan_consolidator(
+            model=model,
+            main_model_id=model_id,
+            plan_keep_back=cmp_cfg.get("plan_keep_back", 3),
+            gap_summary_max_tokens=cmp_cfg.get("gap_summary_max_tokens", 500),
+            max_retries=cmp_cfg.get("max_retries", 10),
+        )
+        step_callbacks = {
+            ActionStep: [_step_callbacks[ActionStep], summarizer_cb],
+            PlanningStep: [_step_callbacks[PlanningStep], consolidator_cb],
+            FinalAnswerStep: _step_callbacks[FinalAnswerStep],
+        }
+    else:
+        step_callbacks = _step_callbacks
+
     text_limit = cfg["limits"]["text_limit"]
     browser_config = _build_browser_config(cfg)
     browser = SimpleTextBrowser(**browser_config)
@@ -639,7 +674,7 @@ def create_agent(cfg):
     Your request must be a real sentence, not a google search! Like "Find me this information (...)" rather than a few keywords.
     """,
         provide_run_summary=True,
-        step_callbacks=_step_callbacks,
+        step_callbacks=step_callbacks,
         logger=_streaming_logger,
     )
     text_webbrowser_agent.prompt_templates["managed_agent"][
@@ -676,7 +711,7 @@ def create_agent(cfg):
         additional_authorized_imports=safe_imports,
         planning_interval=agent_cfg["planning_interval"],
         managed_agents=[text_webbrowser_agent],
-        step_callbacks=_step_callbacks,
+        step_callbacks=step_callbacks,
         logger=_streaming_logger,
     )
     # Inject custom instructions into the system prompt template.

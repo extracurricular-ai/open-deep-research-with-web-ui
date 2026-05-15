@@ -51,6 +51,24 @@ DEFAULTS = {
         "text_limit": 100000,
         "max_field_length": 50000,
     },
+    "compaction": {
+        # Two-layer LLM-based observation compaction. See scripts/compaction.py.
+        # Token counts use tiktoken (cl100k_base fallback for non-OpenAI models).
+        "enabled": True,
+        # null = use the agent's main model. Override to a cheaper model id
+        # (e.g. "deepseek-chat") to reduce summarization cost/latency.
+        "summarizer_model_id": None,
+        # Layer 1: per-step summary
+        "summary_threshold_tokens": 1000,
+        "summary_max_tokens": 600,
+        "summary_input_cap_tokens": 6000,
+        # Layer 2: plan-boundary gap consolidation
+        "plan_keep_back": 3,
+        "gap_summary_max_tokens": 500,
+        # On compaction LLM failure, retry this many times before falling back
+        # to head+tail truncation. Default 10 mirrors Claude Code's budget.
+        "max_retries": 10,
+    },
     "other_keys": {
         "hf_token": "",
     },
