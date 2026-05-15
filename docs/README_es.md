@@ -160,59 +160,167 @@ python run.py --model-id "gpt-4o" "Tu pregunta de investigación aquí"
 
 ## Configuración
 
-La configuración se gestiona mediante `odr-config.json` (preferido) o variables de entorno.
+Dos capas de configuración:
 
-### odr-config.json
+1. **`odr-config.json`** — principal, JSON, controla todo (modelos, comportamiento del agente, proveedores de búsqueda, navegador, límites, compactación). Se crea automáticamente desde `odr-config.example.json` en la primera ejecución.
+2. **`.env`** — opcional, para secretos que prefieras no poner en JSON o para despliegues Docker.
 
-Copia `odr-config.example.json` a `odr-config.json` y personaliza:
+Las claves API en `odr-config.json` tienen prioridad sobre los valores de `.env` cuando ambos están definidos.
+
+### Referencia completa de odr-config.json
+
+Copia `odr-config.example.json` a `odr-config.json` y edita. Esquema completo:
 
 ```json
 {
+  "agent": {
+    "search_agent_max_steps": 20,
+    "manager_agent_max_steps": 12,
+    "planning_interval": 4,
+    "verbosity_level": 2
+  },
   "model": {
     "providers": [
-      {
-        "name": "openai",
-        "api_key": "sk-...",
-        "models": ["gpt-4o", "o1", "o3-mini"]
-      }
+      {"provider": "openai",    "api_key": "sk-...", "base_url": ""},
+      {"provider": "deepseek",  "api_key": "",       "base_url": ""},
+      {"provider": "anthropic", "api_key": "",       "base_url": ""}
     ],
-    "default": "gpt-4o"
+    "default_model_id": "o1",
+    "max_completion_tokens": 32768,
+    "reasoning_effort": "high",
+    "retry_max_attempts": 5,
+    "retry_wait_seconds": 30
   },
   "search": {
     "providers": [
-      { "name": "DDGS" },
-      { "name": "META_SOTA", "api_key": "your_key" }
-    ]
-  }
+      {"provider": "DDGS",      "key": ""},
+      {"provider": "TAVILY",    "key": ""},
+      {"provider": "SERPAPI",   "key": ""},
+      {"provider": "META_SOTA", "key": ""},
+      {"provider": "BOCHA",     "key": ""}
+    ],
+    "max_results": 10
+  },
+  "browser": {
+    "viewport_size": 5120,
+    "request_timeout": 300
+  },
+  "limits": {
+    "text_limit": 100000,
+    "max_field_length": 50000
+  },
+  "compaction": {
+    "enabled": true,
+    "summarizer_model_id": null,
+    "summary_threshold_tokens": 1000,
+    "summary_max_tokens": 600,
+    "summary_input_cap_tokens": 6000,
+    "plan_keep_back": 3,
+    "gap_summary_max_tokens": 500,
+    "max_retries": 10
+  },
+  "other_keys": {"hf_token": ""},
+  "models": [ /* Desplegable UI — lista de {id, name, description} */ ]
 }
 ```
 
-La interfaz incluye un panel de configuración integrado para la configuración del lado del cliente. La configuración del lado del servidor está opcionalmente protegida por una contraseña de administrador.
+La UI expone un panel de ajustes que edita el mismo archivo. Las ediciones del lado del servidor vía la UI están protegidas por `CONFIG_ADMIN_PASSWORD` cuando `ENABLE_CONFIG_UI=true`.
+
+#### `agent` — bucle de investigación multi-paso
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `search_agent_max_steps` | `20` | Máximo de pasos ReAct del **sub-agente search** por tarea. Cada paso = 1 llamada LLM + 1 llamada de herramienta (búsqueda web, navegación, inspección de texto). Mayor = investigación más profunda por sub-tarea, pero cada paso adicional acumula ~5–30K tokens de observación en el contexto. |
+| `manager_agent_max_steps` | `12` | Pasos máximos del **manager**. Cada paso normalmente delega a un sub-agente o sintetiza resultados. Raramente necesita aumentarse; tocar el límite suele indicar que la pregunta debe dividirse. |
+| `planning_interval` | `4` | Inserta un paso de "re-planificación" cada N pasos de acción. Más bajo = más corrección de rumbo (mejor cuando el agente pierde el foco); más alto = menos llamadas de planificación (más barato, más rápido). |
+| `verbosity_level` | `2` | Verbosidad del logger. `0` silencioso, `1` info, `2` debug. |
+
+#### `model` — enrutamiento de proveedores LLM
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `providers[]` | OpenAI/DeepSeek/Anthropic placeholder | Lista de credenciales. Cada entrada: `{"provider": "<openai\|deepseek\|anthropic\|...>", "api_key": "...", "base_url": ""}`. El campo `base_url` permite apuntar a un endpoint auto-alojado o proxy que hable el protocolo del proveedor (p. ej. la API compatible con OpenAI de Ollama). Se usa el primer proveedor que coincida con el routing de `default_model_id`. |
+| `default_model_id` | `"o1"` | Qué modelo usa el agente. Routing automático según prefijo — ver [Modelos compatibles](#modelos-compatibles). Override por ejecución con `--model-id`. |
+| `max_completion_tokens` | `32768` | Tope de tokens de salida **antes del clamping**. Cada modelo tiene un techo duro (gpt-4o-mini: 16K, deepseek-chat: 8K, o1: 100K, claude-sonnet-4: 64K). El valor efectivo enviado a la API es `min(este_ajuste, techo_modelo)` — manteniendo el default `32768`, los modelos pequeños se clampean silenciosamente a su propio techo, así nunca recibes 4xx por "max_tokens too large". Bajarlo solo ayuda si quieres salidas más cortas; subir más allá del techo del modelo es no-op. |
+| `reasoning_effort` | `"high"` | Solo se usa cuando `default_model_id` es `"o1"`. Valores: `"low"`, `"medium"`, `"high"`. Compromiso entre latencia/coste y profundidad de razonamiento. |
+| `retry_max_attempts` | `5` | Cuántas veces reintentar errores transitorios (HTTP 429, caídas de conexión, lecturas parciales). Nota: **no** reintenta en errores de context-overflow / 400 (irrecuperables). |
+| `retry_wait_seconds` | `30` | Backoff inicial entre reintentos. Se duplica cada intento con jitter (backoff exponencial). |
+
+#### `search` — proveedores de búsqueda y nº de resultados
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `providers[]` | DDGS primero, resto vacíos | Cadena de fallback ordenada. El agente prueba el primero; si devuelve vacío o error, pasa al siguiente. Añade un campo `key` por entrada (DDGS no necesita). Lista completa: ver [Motores de búsqueda](#motores-de-búsqueda) abajo. |
+| `max_results` | `10` | Cuántos resultados devueltos por consulta. Cada resultado = title + snippet + URL (~unos cientos de tokens). Mayor = red más amplia, pero observaciones más largas. Bajar si chocas con límites de contexto sin compactación. |
+
+#### `browser` — herramienta de navegador de texto
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `viewport_size` | `5120` | Caracteres visibles por vista de página en el navegador simulado. El agente usa `page_up`/`page_down` para hacer scroll. Mayor = menos scroll pero observaciones más grandes. Menor = más navegación pero cada observación más pequeña. |
+| `request_timeout` | `300` | Segundos a esperar por un fetch HTTP. Sitios lentos o VMs pequeñas pueden necesitar más. |
+
+#### `limits` — guardas de tamaño de contenido
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `text_limit` | `100000` | Caracteres máximos devueltos por `text_inspector_tool` (lector de archivos PDF / docs grandes). Evita que una sola llamada `inspect_file_as_text` sature la memoria del agente. |
+| `max_field_length` | `50000` | Caracteres máximos por **campo de evento SSE** enviado al frontend (solo lado de visualización — **no** reduce el input del LLM). Bajarlo solo ahorra ancho de banda servidor → navegador. |
+
+#### `compaction` — compactación LLM del contexto (Layer 1 + Layer 2)
+
+Sin esto, smolagents acumula indefinidamente cada observación cruda y los runs de investigación de 20 pasos sobrepasan inevitablemente las ventanas de contexto de los modelos. Ver `scripts/compaction.py` para la implementación.
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `enabled` | `true` | Switch principal. `false` vuelve al comportamiento de observación cruda (más rápido por paso, pero los runs largos pueden crashear por context overflow). |
+| `summarizer_model_id` | `null` | `null` = usa el modelo principal del agente (lo más simple, sin config extra). Sobrescribe con un id de modelo barato (p. ej. `"deepseek-chat"`) para reducir coste/latencia de la resumarización. **El camino de override está reservado para una futura PR; hoy el valor se lee pero siempre se usa el modelo principal.** |
+| `summary_threshold_tokens` | `1000` | **Layer 1**: omite la resumarización por paso si la observación es más corta (en tokens, contados con tiktoken `cl100k_base`). Por debajo de 1000 tokens, el ahorro no compensa el coste de la llamada LLM. |
+| `summary_max_tokens` | `600` | **Layer 1**: longitud objetivo de salida del resumen por paso. Conserva hechos, números y URLs; descarta cromo de navegación y HTML repetitivo. |
+| `summary_input_cap_tokens` | `6000` | **Layer 1**: input máximo enviado al summarizer (trim head + tail si la observación es mayor). Acota el coste de contexto del propio summarizer. |
+| `plan_keep_back` | `3` | **Layer 2**: cuántos plan-gaps recientes permanecen sin compactar. Con `planning_interval=4` y 20 pasos search-agent, dispara una vez por run típico (compacta el gap más antiguo). Más bajo (`2` o `1`) consolida más agresivamente. |
+| `gap_summary_max_tokens` | `500` | **Layer 2**: longitud objetivo de cada resumen de gap consolidado. Las URLs del gap se añaden literalmente. |
+| `max_retries` | `10` | Reintentos para la llamada LLM de compactación (capa de retry sobre el retrier interno del modelo). Refleja el budget por defecto de Claude Code. Tras agotar, fallback a truncamiento head+tail por tokens en lugar de crashear el run. |
+
+#### `other_keys` — tokens varios
+
+| Clave | Por defecto | Efecto |
+|---|---|---|
+| `hf_token` | `""` | Token de HuggingFace. Solo necesario al ejecutar el benchmark GAIA (`run_gaia.py`) que descarga el dataset de validación. |
+
+#### `models` — desplegable de la UI
+
+Lista puramente de visualización con triples `{id, name, description}` para el selector de modelos en la UI web. Editar esto solo afecta a la UI. El modelo realmente usado es el que `default_model_id` (o CLI `--model-id`) resuelva.
 
 ### Variables de entorno
 
-Para Docker o entornos donde un archivo de configuración no es conveniente, puedes usar `.env`:
+Para Docker o cuando prefieres no poner secretos en JSON, copia `.env.example` a `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Descripción |
+| Variable | Efecto |
 |---|---|
-| `ENABLE_CONFIG_UI` | Habilitar la interfaz de configuración de administrador a través de la web (`false` por defecto) |
-| `CONFIG_ADMIN_PASSWORD` | Contraseña para cambios de configuración del lado del servidor |
-| `META_SOTA_API_KEY` | Clave API para búsqueda MetaSo |
-| `SERPAPI_API_KEY` | Clave API para búsqueda SerpAPI |
-| `BOCHA_API_KEY` | Clave API para búsqueda Bocha AI (博查) |
-| `DEBUG` | Habilitar registro de depuración (`False` por defecto) |
-| `LOG_LEVEL` | Verbosidad del registro (`INFO` por defecto) |
+| `ENABLE_CONFIG_UI` | Si `true`, expone el endpoint de edición de config del lado del servidor en la UI. Por defecto `false`. |
+| `CONFIG_ADMIN_PASSWORD` | Contraseña para la UI de config del lado del servidor. Requerida si `ENABLE_CONFIG_UI=true`. |
+| `META_SOTA_API_KEY` | Clave API para MetaSo. Fallback si `search.providers[].key` está vacío. |
+| `SERPAPI_API_KEY` | Clave API para SerpAPI. Misma regla de fallback. |
+| `BOCHA_API_KEY` | Clave API para Bocha AI (博查). Misma regla de fallback. |
+| `TAVILY_API_KEY` | Clave API para Tavily. Misma regla de fallback. |
+| `OPENAI_API_KEY` | Clave OpenAI. Usada cuando la entrada openai de `model.providers[]` no tiene `api_key`. |
+| `ANTHROPIC_API_KEY` | Clave Anthropic. Misma regla de fallback. |
+| `DEEPSEEK_API_KEY` | Clave DeepSeek. Misma regla de fallback. |
+| `HF_TOKEN` | Token HuggingFace. Fallback para `other_keys.hf_token`. |
+| `DEBUG` | Activa logging de debug (`false` por defecto). |
+| `LOG_LEVEL` | Verbosidad — `DEBUG`, `INFO`, `WARNING`, `ERROR` (`INFO` por defecto). |
 
 > [!NOTE]
-> Las claves API establecidas en `odr-config.json` tienen prioridad sobre las variables de entorno.
+> Las claves en `odr-config.json` tienen prioridad sobre `.env`.
 
 ### Modelos compatibles
 
-Soporta OpenAI, Anthropic, DeepSeek, Ollama y cualquier proveedor compatible con OpenAI. El enrutamiento del modelo es automatico segun el prefijo del nombre. Ejemplos:
+Soporta OpenAI, Anthropic, DeepSeek, Ollama y cualquier proveedor compatible con OpenAI. El routing del modelo es automático según el prefijo del id. Ejemplos:
 
 ```bash
 python run.py --model-id "gpt-4o" "Tu pregunta"
@@ -222,6 +330,8 @@ python run.py --model-id "deepseek/deepseek-chat" "Tu pregunta"
 python run.py --model-id "ollama/mistral" "Tu pregunta"  # modelo local
 ```
 
+`max_completion_tokens` se clampea automáticamente al techo de salida publicado de cada modelo (tabla completa en `scripts/model_routing.py`). No hace falta bajar la config al cambiar a un modelo de tope pequeño.
+
 > [!WARNING]
 > El modelo `o1` requiere acceso API OpenAI tier-3: https://help.openai.com/en/articles/10362446-api-access-to-o1-and-o3-mini
 
@@ -229,12 +339,13 @@ python run.py --model-id "ollama/mistral" "Tu pregunta"  # modelo local
 
 | Motor | Clave requerida | Notas |
 |---|---|---|
-| `DDGS` | No | Por defecto, DuckDuckGo gratuito |
-| `META_SOTA` | Sí | MetaSo, a menudo mejor para consultas en chino |
-| `SERPAPI` | Sí | Google a través de SerpAPI |
-| `BOCHA` | Sí | Bocha AI (博查), búsqueda web optimizada para chino |
+| `DDGS` | No | DuckDuckGo, gratis, por defecto. |
+| `TAVILY` | Sí | Tavily, suele ser la mejor calidad de resultados para consultas en inglés. |
+| `META_SOTA` | Sí | MetaSo, optimizado para consultas en chino. |
+| `SERPAPI` | Sí | Resultados de Google vía SerpAPI. |
+| `BOCHA` | Sí | Bocha AI (博查), búsqueda web optimizada para chino. |
 
-Se pueden configurar múltiples motores con replegamiento automático — el agente los prueba en orden.
+Se pueden listar múltiples motores en `search.providers[]` — el agente los prueba en orden y pasa al siguiente con resultados vacíos o errores.
 
 ---
 
