@@ -27,7 +27,7 @@ DEFAULTS = {
             {"provider": "anthropic", "api_key": "", "base_url": ""},
         ],
         "default_model_id": "o1",
-        "max_completion_tokens": 8192,
+        "max_completion_tokens": 32768,
         "reasoning_effort": "high",
         "retry_max_attempts": 5,
         "retry_wait_seconds": 30,

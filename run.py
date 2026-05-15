@@ -32,7 +32,7 @@ from smolagents import (
     ToolCallingAgent,
 )
 from scripts.anthropic_model import AnthropicModel
-from scripts.model_routing import get_model_routing
+from scripts.model_routing import get_model_routing, get_model_max_output_tokens
 
 # --- JSON protocol for structured output ---
 # Save real stdout for JSON events, redirect sys.stdout to stderr
@@ -570,19 +570,32 @@ def create_agent(cfg):
     # Route to correct SDK based on model name
     routing = get_model_routing(model_id)
 
+    # Clamp configured max_completion_tokens to the model's actual cap.
+    # Without this, switching to a small-cap model (e.g. deepseek-chat: 8192,
+    # gpt-4o-mini: 16384) would 4xx when the global default is research-friendly.
+    configured_max = cfg["model"]["max_completion_tokens"]
+    model_cap = get_model_max_output_tokens(model_id)
+    effective_max = min(configured_max, model_cap) if model_cap else configured_max
+    if model_cap and configured_max > model_cap:
+        print(
+            f"[max_completion_tokens] clamped {configured_max} -> {effective_max} "
+            f"(model {model_id} cap is {model_cap})",
+            file=sys.stderr,
+        )
+
     if routing["provider"] == "anthropic":
         api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         model = AnthropicModel(
             model_id=routing["bare_id"],
             api_key=api_key,
             custom_role_conversions=custom_role_conversions,
-            max_tokens=cfg["model"]["max_completion_tokens"],
+            max_tokens=effective_max,
         )
     else:
         model_params = {
             "model_id": routing["bare_id"],
             "custom_role_conversions": custom_role_conversions,
-            "max_completion_tokens": cfg["model"]["max_completion_tokens"],
+            "max_completion_tokens": effective_max,
         }
         if api_key:
             model_params["api_key"] = api_key
