@@ -606,6 +606,11 @@ def create_agent(cfg):
             model_params["api_base"] = routing["api_base"]
         if model_id == "o1":
             model_params["reasoning_effort"] = cfg["model"]["reasoning_effort"]
+        # DeepSeek v4 (flash & pro) are internally aliased to reasoner-class
+        # models on the API side, which reject tool_choice="required" (the
+        # smolagents default). Force "auto" so ToolCallingAgent works.
+        if routing["provider"] == "deepseek":
+            model_params["tool_choice"] = "auto"
         model = OpenAIServerModel(**model_params)
 
     model = _patch_model_retrier(model, cfg)
