@@ -73,7 +73,8 @@ This tool handles the following file extensions: [".html", ".htm", ".xlsx", ".pp
                 ],
             },
         ]
-        return self.model(messages).content
+        content: str = self.model(messages).content
+        return content
 
     def forward(self, file_path, question: str | None = None) -> str:
         from smolagents.models import MessageRole
@@ -125,4 +126,5 @@ This tool handles the following file extensions: [".html", ".htm", ".xlsx", ".pp
                 ],
             },
         ]
-        return self.model(messages).content
+        content: str = self.model(messages).content
+        return content

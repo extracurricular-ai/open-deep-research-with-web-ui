@@ -66,7 +66,7 @@ If you are unable to determine the final answer, output 'FINAL ANSWER: Unable to
 
     response = reformulation_model(messages).content
 
-    final_answer = response.split("FINAL ANSWER: ")[-1].strip()
+    final_answer: str = response.split("FINAL ANSWER: ")[-1].strip()
     print("> Reformulated answer: ", final_answer)
 
     #     if "unable to determine" in final_answer.lower():

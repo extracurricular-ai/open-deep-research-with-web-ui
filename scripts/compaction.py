@@ -34,7 +34,6 @@ import tiktoken
 from smolagents.memory import ActionStep, PlanningStep
 from smolagents.models import ChatMessage, MessageRole
 
-
 URL_RE = re.compile(r"https?://[^\s)\]>'\"<]+", re.IGNORECASE)
 
 SUMMARY_PREFIX = "[summary]"
@@ -171,7 +170,9 @@ def make_per_step_summarizer(
             # than leaving the giant raw observation in memory and blowing
             # context on the next step.
             summary = _trim_input_head_tail(obs, summary_max_tokens, encoder)
-            summary += f" [summarizer failed after {max_retries} retries: {type(e).__name__}]"
+            summary += (
+                f" [summarizer failed after {max_retries} retries: {type(e).__name__}]"
+            )
 
         url_block = f"\n\nURLs: {urls}" if urls else ""
         step.observations = (
@@ -262,9 +263,7 @@ def make_plan_consolidator(
             consolidation = _truncate_to_tokens(
                 combined, gap_summary_max_tokens, encoder
             )
-            consolidation += (
-                f" [consolidator failed after {max_retries} retries: {type(e).__name__}]"
-            )
+            consolidation += f" [consolidator failed after {max_retries} retries: {type(e).__name__}]"
 
         url_block = f"\nURLs visited: {all_urls[:30]}" if all_urls else ""
         agent.memory.steps[action_indices[0]].observations = (

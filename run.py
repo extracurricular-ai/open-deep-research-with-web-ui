@@ -224,7 +224,7 @@ class DuckDuckGoSearchToolLabeled(DuckDuckGoSearchTool):
     """Wrapper around DuckDuckGoSearchTool to add engine label to results"""
 
     def forward(self, query: str) -> str:
-        result = super().forward(query)
+        result: str = super().forward(query)
         # Replace "## Search Results" with "## Search Results (DuckDuckGo)"
         return result.replace(
             "## Search Results\n\n", "## Search Results (DuckDuckGo)\n\n", 1
