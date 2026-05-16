@@ -198,7 +198,7 @@ def visualizer(image_path: str, question: str | None = None) -> str:
         "https://api.openai.com/v1/chat/completions", headers=headers, json=payload
     )
     try:
-        output = response.json()["choices"][0]["message"]["content"]
+        output: str = response.json()["choices"][0]["message"]["content"]
     except Exception:
         raise Exception(f"Response format unexpected: {response.json()}")
 

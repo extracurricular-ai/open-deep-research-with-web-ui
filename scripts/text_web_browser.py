@@ -43,7 +43,9 @@ class SimpleTextBrowser:
         self.viewport_pages: list[tuple[int, int]] = list()
         self.set_address(self.start_page)
         self.serpapi_key = serpapi_key
-        self.request_kwargs = request_kwargs
+        self.request_kwargs: dict[str, Any] = (
+            request_kwargs if request_kwargs is not None else {}
+        )
         self.request_kwargs["cookies"] = COOKIES
         self._mdconvert = MarkdownConverter()
         self._page_content: str = ""
@@ -174,7 +176,7 @@ class SimpleTextBrowser:
         if nquery.strip() == "":
             return None
 
-        idxs = list()
+        idxs: list[int] = list()
         idxs.extend(range(starting_viewport, len(self.viewport_pages)))
         idxs.extend(range(0, starting_viewport))
 
@@ -286,7 +288,7 @@ class SimpleTextBrowser:
         self._set_page_content(content)
 
     def _fetch_page(self, url: str) -> None:
-        download_path = ""
+        download_path: str | None = ""
         try:
             if url.startswith("file://"):
                 download_path = os.path.normcase(os.path.normpath(unquote(url[7:])))
@@ -316,15 +318,16 @@ class SimpleTextBrowser:
                     self._set_page_content(res.text_content)
                 # A download
                 else:
+                    downloads_folder = self.downloads_folder or "."
                     # Try producing a safe filename
-                    fname = None
+                    fname: str | None = None
                     download_path = None
                     try:
                         fname = pathvalidate.sanitize_filename(
                             os.path.basename(urlparse(url).path)
                         ).strip()
                         download_path = os.path.abspath(
-                            os.path.join(self.downloads_folder, fname)
+                            os.path.join(downloads_folder, fname)
                         )
 
                         suffix = 0
@@ -333,7 +336,7 @@ class SimpleTextBrowser:
                             base, ext = os.path.splitext(fname)
                             new_fname = f"{base}__{suffix}{ext}"
                             download_path = os.path.abspath(
-                                os.path.join(self.downloads_folder, new_fname)
+                                os.path.join(downloads_folder, new_fname)
                             )
 
                     except NameError:
@@ -346,9 +349,10 @@ class SimpleTextBrowser:
                             extension = ".download"
                         fname = str(uuid.uuid4()) + extension
                         download_path = os.path.abspath(
-                            os.path.join(self.downloads_folder, fname)
+                            os.path.join(downloads_folder, fname)
                         )
 
+                    assert download_path is not None
                     # Open a file for writing
                     with open(download_path, "wb") as fh:
                         for chunk in response.iter_content(chunk_size=512):
@@ -360,13 +364,13 @@ class SimpleTextBrowser:
 
         except UnsupportedFormatException as e:
             print(e)
-            self.page_title = ("Download complete.",)
+            self.page_title = "Download complete."
             self._set_page_content(
                 f"# Download complete\n\nSaved file to '{download_path}'"
             )
         except FileConversionException as e:
             print(e)
-            self.page_title = ("Download complete.",)
+            self.page_title = "Download complete."
             self._set_page_content(
                 f"# Download complete\n\nSaved file to '{download_path}'"
             )
@@ -420,7 +424,7 @@ class SimpleTextBrowser:
 class SearchInformationTool(Tool):
     name = "web_search"
     description = "Perform a web search query (think a google search) and returns the search results."
-    inputs = {
+    inputs: dict[str, dict[str, Any]] = {
         "query": {"type": "string", "description": "The web search query to perform."}
     }
     inputs["filter_year"] = {
@@ -430,7 +434,7 @@ class SearchInformationTool(Tool):
     }
     output_type = "string"
 
-    def __init__(self, browser):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -451,7 +455,7 @@ class VisitTool(Tool):
     }
     output_type = "string"
 
-    def __init__(self, browser=None):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -475,7 +479,7 @@ DO NOT use this tool for .pdf or .txt or .htm files: for these types of files us
     }
     output_type = "string"
 
-    def __init__(self, browser):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -486,8 +490,8 @@ DO NOT use this tool for .pdf or .txt or .htm files: for these types of files us
             url = url.replace("abs", "pdf")
         response = requests.get(url)
         content_type = response.headers.get("content-type", "")
-        extension = mimetypes.guess_extension(content_type)
-        if extension and isinstance(extension, str):
+        extension = mimetypes.guess_extension(content_type) or ""
+        if extension:
             new_path = f"./downloads/file{extension}"
         else:
             new_path = "./downloads/file.object"
@@ -515,7 +519,7 @@ class ArchiveSearchTool(Tool):
     }
     output_type = "string"
 
-    def __init__(self, browser=None):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -557,10 +561,10 @@ class ArchiveSearchTool(Tool):
 class PageUpTool(Tool):
     name = "page_up"
     description = "Scroll the viewport UP one page-length in the current webpage and return the new viewport content."
-    inputs = {}
+    inputs: dict[str, dict[str, Any]] = {}
     output_type = "string"
 
-    def __init__(self, browser=None):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -573,10 +577,10 @@ class PageUpTool(Tool):
 class PageDownTool(Tool):
     name = "page_down"
     description = "Scroll the viewport DOWN one page-length in the current webpage and return the new viewport content."
-    inputs = {}
+    inputs: dict[str, dict[str, Any]] = {}
     output_type = "string"
 
-    def __init__(self, browser=None):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -597,7 +601,7 @@ class FinderTool(Tool):
     }
     output_type = "string"
 
-    def __init__(self, browser=None):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 
@@ -617,10 +621,10 @@ class FinderTool(Tool):
 class FindNextTool(Tool):
     name = "find_next"
     description = "Scroll the viewport to next occurrence of the search string. This is equivalent to finding the next match in a Ctrl+F search."
-    inputs = {}
+    inputs: dict[str, dict[str, Any]] = {}
     output_type = "string"
 
-    def __init__(self, browser=None):
+    def __init__(self, browser: SimpleTextBrowser):
         super().__init__()
         self.browser = browser
 

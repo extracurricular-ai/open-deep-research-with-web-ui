@@ -53,7 +53,8 @@ SESSION_DIR.mkdir(exist_ok=True)
 # Note: cleanup_stale_sessions() is called after function definitions below
 
 # In-memory session tracking for this worker
-active_sessions = {}  # session_id -> {'process': subprocess.Popen, 'queue': Queue}
+# session_id -> {'process': subprocess.Popen, 'queue': Queue}
+active_sessions: dict[str, dict] = {}
 sessions_lock = threading.Lock()
 
 

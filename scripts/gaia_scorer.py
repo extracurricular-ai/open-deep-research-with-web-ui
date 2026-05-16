@@ -1,6 +1,7 @@
 import re
 import string
 import warnings
+from typing import Any
 
 
 def normalize_number_str(number_str: str) -> float:
@@ -23,7 +24,7 @@ def split_string(
     return re.split(pattern, s)
 
 
-def is_float(element: any) -> bool:
+def is_float(element: Any) -> bool:
     try:
         float(element)
         return True

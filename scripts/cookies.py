@@ -712,5 +712,8 @@ COOKIES = RequestsCookieJar()
 # Add cookies to the jar
 for cookie in COOKIES_LIST:
     COOKIES.set(
-        cookie["name"], cookie["value"], domain=cookie["domain"], path=cookie["path"]
+        str(cookie["name"]),
+        str(cookie["value"]),
+        domain=str(cookie["domain"]),
+        path=str(cookie["path"]),
     )

@@ -82,14 +82,29 @@
 
 ## 为什么选择本项目？
 
-开源的 Deep Research 替代方案有很多，以下是本项目与它们的对比：
+- **一行 Docker 命令即装即用，无需配置** —— `docker run -p 5080:5080 ghcr.io/s2thend/open-deep-research-with-ui:latest` 启动后立即可用。DuckDuckGo 搜索内置，只需一个模型 API 密钥即可开始研究。
+
+- **不依赖 LiteLLM** —— 仅直接调用 OpenAI + Anthropic 官方 SDK。移除了 LiteLLM 这个反复出现安全公告的中间翻译层。对企业 / 内网部署更安全。
+
+- **支持气隙环境、可自托管** —— 无遥测、无任何托管服务依赖，仅与你显式配置的模型和搜索 API 通信。配合 Ollama / LM Studio / vLLM 可完全离线运行在任何防火墙之内。
+
+- **为 fork 而生** —— smolagents 之上约 3K 行 Python。新增工具只需往 `scripts/` 丢一个文件；切换 provider 改 `scripts/model_routing.py`；钩进 agent step callbacks（见 `scripts/compaction.py`）。是*你自己*内部研究 agent 的起点，不是封闭产品。
+
+- **多搜索 provider 自动降级** —— 开箱即用接入 DDGS、Tavily、SerpAPI、MetaSo、博查。配置为有序列表后，agent 会在结果为空或撞 rate-limit 时自动顺降。跨区域、中国托管、气隙环境全部友好。
+
+- **并行后台研究** —— 本领域最独特的功能。同时运行多个研究任务，每个都持久化到 SQLite。关闭浏览器，数小时后回来，结果还在。其他开源深度研究工具均不支持此工作流。
+
+### 与其他方案对比
 
 | 功能 | **本项目** | [nickscamara/open-deep-research](https://github.com/nickscamara/open-deep-research) | [gpt-researcher](https://github.com/assafelovic/gpt-researcher) | [langchain/open_deep_research](https://github.com/langchain-ai/open_deep_research) | [smolagents](https://github.com/huggingface/smolagents) |
 |---|---|---|---|---|---|
 | **Docker / 一键部署** | ✅ GHCR 预构建镜像 | ✅ Dockerfile | ✅ Docker Compose | ❌ 手动部署 | ❌ 仅库文件 |
+| **不依赖 LiteLLM** | ✅ 直接 OpenAI + Anthropic SDK | ⚠️ AI SDK 层 | ⚠️ | ⚠️ langchain 层 | ✅ |
+| **气隙 / 内网部署** | ✅ 无遥测、无外部依赖 | ⚠️ 依赖 Firecrawl | ⚠️ 默认走云 | ⚠️ LangGraph Studio | ✅ |
+| **多 provider 搜索带降级** | ✅ DDGS + Tavily + SerpAPI + MetaSo + 博查 | ❌ 仅 Firecrawl | ⚠️ 单次单 provider | ⚠️ 可配置 | ⚠️ DIY |
+| **区域性模型 provider** | ✅ DeepSeek 一等支持 | ⚠️ 偏美国 | ⚠️ 偏美国 | ⚠️ 偏美国 | ✅ |
 | **无需构建前端** | ✅ Preact + htm（无需构建） | ❌ 需要 Next.js 构建 | ❌ 需要 Next.js 构建 | ❌ LangGraph Studio | — |
 | **开箱即用免费搜索** | ✅ DuckDuckGo（无需密钥） | ❌ 需要 Firecrawl API | ⚠️ 推荐使用密钥 | ⚠️ 可配置 | ✅ |
-| **模型无关** | ✅ ОреnАI, Аnthrорiс, DеерSееk, Оllаmа | ✅ AI SDK 提供商 | ✅ 多种提供商 | ✅ 可配置 | ✅ |
 | **本地模型支持** | ✅ Ollama、LM Studio | ⚠️ 有限 | ✅ Ollama/Groq | ✅ | ✅ |
 | **并行后台任务** | ✅ 多任务同时运行 | ❌ | ❌ | ❌ | ❌ |
 | **会话历史 / 回放** | ✅ SQLite 支持 | ❌ | ❌ | ❌ | ❌ |
@@ -97,14 +112,6 @@
 | **视觉 / 图像分析** | ✅ PDF 截图、视觉问答 | ❌ | ⚠️ 有限 | ❌ | ⚠️ |
 | **音频 / YouTube** | ✅ 转录、语音 | ❌ | ❌ | ❌ | ❌ |
 | **GAIA 基准分数** | **55% pass@1** | — | — | — | 55%（原始） |
-
-### 本项目的核心优势
-
-- **并行后台研究** —— 本领域最独特的功能。同时启动多个深度研究任务 —— 每个任务作为独立子进程运行，将所有事件持久化到 SQLite，可独立监控或回放。关闭浏览器，数小时后返回，结果依然等待着你。其他开源深度研究工具均不支持此工作流。
-- **单条 `docker run` 部署** —— GHCR 预构建镜像可在任何支持 Docker 的平台上运行：Linux、macOS、Windows、ARM、云虚拟机、树莓派。
-- **无需构建步骤** —— 前端使用带 `htm` 模板字面量的 Preact。无需 Node.js，无需 `npm install`，无需 webpack。直接打开浏览器。
-- **默认免费** —— DuckDuckGo 搜索无需 API 密钥，只需添加一个模型 API 密钥即可立即使用。
-- **更广泛的媒体支持** —— 处理其他项目留给用户自行解决的 PDF、图像、音频文件和 YouTube 字幕。
 
 ---
 
@@ -160,59 +167,167 @@ python run.py --model-id "gpt-4o" "你的研究问题"
 
 ## 配置
 
-配置通过 `odr-config.json`（推荐）或环境变量管理。
+两层配置：
 
-### odr-config.json
+1. **`odr-config.json`** —— 主配置，JSON 格式，控制一切（模型、智能体行为、搜索提供商、浏览器、限制、压缩）。首次运行时从 `odr-config.example.json` 自动创建。
+2. **`.env`** —— 可选，用于不想放在 JSON 中的密钥，或 Docker 部署。
 
-将 `odr-config.example.json` 复制到 `odr-config.json` 并自定义：
+两边都设置时，`odr-config.json` 中的 API 密钥优先。
+
+### odr-config.json 全字段参考
+
+将 `odr-config.example.json` 复制为 `odr-config.json` 后编辑。完整 schema：
 
 ```json
 {
+  "agent": {
+    "search_agent_max_steps": 20,
+    "manager_agent_max_steps": 12,
+    "planning_interval": 4,
+    "verbosity_level": 2
+  },
   "model": {
     "providers": [
-      {
-        "name": "openai",
-        "api_key": "sk-...",
-        "models": ["gpt-4o", "o1", "o3-mini"]
-      }
+      {"provider": "openai",    "api_key": "sk-...", "base_url": ""},
+      {"provider": "deepseek",  "api_key": "",       "base_url": ""},
+      {"provider": "anthropic", "api_key": "",       "base_url": ""}
     ],
-    "default": "gpt-4o"
+    "default_model_id": "o1",
+    "max_completion_tokens": 32768,
+    "reasoning_effort": "high",
+    "retry_max_attempts": 5,
+    "retry_wait_seconds": 30
   },
   "search": {
     "providers": [
-      { "name": "DDGS" },
-      { "name": "META_SOTA", "api_key": "your_key" }
-    ]
-  }
+      {"provider": "DDGS",      "key": ""},
+      {"provider": "TAVILY",    "key": ""},
+      {"provider": "SERPAPI",   "key": ""},
+      {"provider": "META_SOTA", "key": ""},
+      {"provider": "BOCHA",     "key": ""}
+    ],
+    "max_results": 10
+  },
+  "browser": {
+    "viewport_size": 5120,
+    "request_timeout": 300
+  },
+  "limits": {
+    "text_limit": 100000,
+    "max_field_length": 50000
+  },
+  "compaction": {
+    "enabled": true,
+    "summarizer_model_id": null,
+    "summary_threshold_tokens": 1000,
+    "summary_max_tokens": 600,
+    "summary_input_cap_tokens": 6000,
+    "plan_keep_back": 3,
+    "gap_summary_max_tokens": 500,
+    "max_retries": 10
+  },
+  "other_keys": {"hf_token": ""},
+  "models": [ /* UI 下拉框 —— {id, name, description} 列表 */ ]
 }
 ```
 
-UI 包含内置设置面板用于客户端配置。服务器端配置可选择使用管理员密码保护。
+UI 自带设置面板编辑同一份文件。当 `ENABLE_CONFIG_UI=true` 时，服务器端编辑接口由 `CONFIG_ADMIN_PASSWORD` 保护。
+
+#### `agent` —— 多步研究循环
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `search_agent_max_steps` | `20` | **search 子智能体**单次任务最多走多少步 ReAct。每步 = 一次 LLM 调用 + 一次工具调用（搜索/浏览/读文档）。越大越深，但每多一步累加 5–30K tokens 的 observation 进上下文。 |
+| `manager_agent_max_steps` | `12` | **manager** 最多走几步。每步通常委托给子智能体或综合结果。一般不需要调高；撞顶通常意味着问题该拆。 |
+| `planning_interval` | `4` | 每 N 个 action step 插入一次"重新规划"。低 = 更频繁纠偏（适合智能体跑偏的场景）；高 = 减少 planning 调用（更便宜更快）。 |
+| `verbosity_level` | `2` | 日志详细程度。`0` 静默，`1` info，`2` debug。 |
+
+#### `model` —— LLM 提供商路由
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `providers[]` | OpenAI/DeepSeek/Anthropic 占位 | 凭据列表。每项：`{"provider": "<openai\|deepseek\|anthropic\|...>", "api_key": "...", "base_url": ""}`。`base_url` 用于指向自托管或代理端点（兼容该 provider 的 wire 协议，例如 Ollama 的 OpenAI 兼容 API）。`default_model_id` 路由到的第一个匹配 provider 被使用。 |
+| `default_model_id` | `"o1"` | 智能体使用的模型。按前缀自动路由 —— 见[支持的模型](#支持的模型)。每次运行可用 `--model-id` 覆盖。 |
+| `max_completion_tokens` | `32768` | 输出 token 上限**未 clamp 前**的值。每个模型都有硬上限（gpt-4o-mini: 16K，deepseek-chat: 8K，o1: 100K，claude-sonnet-4: 64K）。实际传给 API 的是 `min(此设置, 模型上限)` —— 保留默认 `32768`，小模型会自动 clamp 到自己的上限，永远不会因为 "max_tokens too large" 报 4xx。调小只在你想限制输出长度时有用；调高超过模型上限是 no-op。 |
+| `reasoning_effort` | `"high"` | 仅当 `default_model_id` 为 `"o1"` 时生效。可选 `"low"`、`"medium"`、`"high"`。在延迟/成本和推理深度间权衡。 |
+| `retry_max_attempts` | `5` | 临时错误（HTTP 429、连接掉、partial read）重试次数。注意：**不**对 context 超限 / 400 类错误重试（这些不可恢复）。 |
+| `retry_wait_seconds` | `30` | 重试初始 backoff，每次翻倍 + jitter（指数退避）。 |
+
+#### `search` —— 搜索提供商和结果数
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `providers[]` | DDGS 排首位，其余空 | 有序降级链。智能体先用第一个；返回空或报错则换下一个。每项加 `key` 字段（DDGS 不需要）。完整 provider 列表见下方[搜索引擎](#搜索引擎)。 |
+| `max_results` | `10` | 每次搜索返回多少条结果。每条 = title + snippet + URL（几百 tokens）。大 = 网撒得宽，但 observation 更长。如果撞 context 上限且没开 compaction，可以调低。 |
+
+#### `browser` —— 文本浏览器工具
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `viewport_size` | `5120` | 模拟浏览器单次显示的字符数。智能体用 `page_up`/`page_down` 翻页。大 = 翻页少但 observation 大；小 = 多次翻页但每次小。 |
+| `request_timeout` | `300` | HTTP 请求超时秒数。慢站点或小 VM 上可能要调高。 |
+
+#### `limits` —— 内容大小限制
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `text_limit` | `100000` | `text_inspector_tool`（PDF / 大文档读取器）单次返回的字符上限。防止单个 `inspect_file_as_text` 调用爆掉智能体的 memory。 |
+| `max_field_length` | `50000` | 发给前端的**单个 SSE event 字段**字符上限（仅显示侧 —— **不**减少 LLM input）。调低只省 server 到 browser 的带宽。 |
+
+#### `compaction` —— LLM 上下文压缩（Layer 1 + Layer 2）
+
+不开它，smolagents 会无限累积每步的原始 observation，20 步研究任务必撞模型 context 上限。实现见 `scripts/compaction.py`。
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `enabled` | `true` | 总开关。`false` 退回原始 observation 行为（每步更快，但长任务可能因 context 超限崩溃）。 |
+| `summarizer_model_id` | `null` | `null` = 用主模型（最简单，零额外配置）。可以填便宜模型 id（例如 `"deepseek-chat"`）降低摘要成本/延迟。**目前覆盖路径预留给后续 PR；当前读取该值但始终用主模型。** |
+| `summary_threshold_tokens` | `1000` | **Layer 1**：observation 短于此 token 数（用 tiktoken `cl100k_base` 计数）则不摘要。低于 1000 tokens 时，摘要省的不抵 LLM 调用本身。 |
+| `summary_max_tokens` | `600` | **Layer 1**：每步摘要的目标输出长度。摘要保留事实/数字/URL，丢掉导航 chrome 和重复 HTML。 |
+| `summary_input_cap_tokens` | `6000` | **Layer 1**：喂给摘要器的最大 input（observation 超此值则 head + tail 截断）。控制摘要器自己的上下文成本。 |
+| `plan_keep_back` | `3` | **Layer 2**：保留最近多少个 plan-gap 不压缩。`planning_interval=4` + 20 步 search-agent 时，典型一次任务触发 1 次（压最老 gap）。降到 `2` 或 `1` 更激进。 |
+| `gap_summary_max_tokens` | `500` | **Layer 2**：每段合并 gap summary 的目标长度。该 gap 的 URL 原样附上。 |
+| `max_retries` | `10` | 压缩 LLM 调用的重试次数（叠在模型自身重试器上的额外一层）。对齐 Claude Code 默认预算。耗尽后降级到 head+tail token 截断，不让整个 run 崩。 |
+
+#### `other_keys` —— 杂项 token
+
+| 字段 | 默认 | 作用 |
+|---|---|---|
+| `hf_token` | `""` | HuggingFace token。仅运行 GAIA 基准（`run_gaia.py`）下载验证集时需要。 |
+
+#### `models` —— UI 下拉框
+
+纯展示用的 `{id, name, description}` 列表，给 web UI 模型选择器用。改这里只影响 UI。实际使用的模型由 `default_model_id`（或 CLI `--model-id`）决定。
 
 ### 环境变量
 
-对于 Docker 或不方便使用配置文件的环境，可以使用 `.env`：
+Docker 部署或者不愿把密钥放进 JSON 时，把 `.env.example` 复制成 `.env`：
 
 ```bash
 cp .env.example .env
 ```
 
-| 变量 | 描述 |
+| 变量 | 作用 |
 |---|---|
-| `ENABLE_CONFIG_UI` | 通过 Web 启用管理配置 UI（默认 `false`） |
-| `CONFIG_ADMIN_PASSWORD` | 服务器端配置更改密码 |
-| `META_SOTA_API_KEY` | MetaSo 搜索的 API 密钥 |
-| `SERPAPI_API_KEY` | SerpAPI 搜索的 API 密钥 |
-| `BOCHA_API_KEY` | 博查 AI（Bocha）搜索的 API 密钥 |
-| `DEBUG` | 启用调试日志（默认 `False`） |
-| `LOG_LEVEL` | 日志详细程度（默认 `INFO`） |
+| `ENABLE_CONFIG_UI` | `true` 时在 UI 暴露服务器端配置编辑端点。默认 `false`。 |
+| `CONFIG_ADMIN_PASSWORD` | 服务器端配置 UI 的密码。`ENABLE_CONFIG_UI=true` 时必填。 |
+| `META_SOTA_API_KEY` | MetaSo 搜索的 API 密钥。`search.providers[].key` 为空时作为 fallback。 |
+| `SERPAPI_API_KEY` | SerpAPI 的 API 密钥。同 fallback 规则。 |
+| `BOCHA_API_KEY` | 博查 AI（Bocha）搜索的 API 密钥。同 fallback 规则。 |
+| `TAVILY_API_KEY` | Tavily 搜索的 API 密钥。同 fallback 规则。 |
+| `OPENAI_API_KEY` | OpenAI key。`model.providers[]` openai 项 `api_key` 为空时使用。 |
+| `ANTHROPIC_API_KEY` | Anthropic key。同 fallback 规则。 |
+| `DEEPSEEK_API_KEY` | DeepSeek key。同 fallback 规则。 |
+| `HF_TOKEN` | HuggingFace token。`other_keys.hf_token` 的 fallback。 |
+| `DEBUG` | 启用调试日志（默认 `false`）。 |
+| `LOG_LEVEL` | 日志详细程度 —— `DEBUG`、`INFO`、`WARNING`、`ERROR`（默认 `INFO`）。 |
 
 > [!NOTE]
-> 在 `odr-config.json` 中设置的 API 密钥优先于环境变量。
+> `odr-config.json` 中的密钥优先于 `.env`。
 
 ### 支持的模型
 
-支持 ОреnАI、Аnthrорiс、DеерSееk、Оllаmа 及任何 ОреnАI 兼容的提供商。模型路由根据模型名称前缀自动选择。示例：
+支持 OpenAI、Anthropic、DeepSeek、Ollama 及任何 OpenAI 兼容的提供商。模型路由按 model id 前缀自动判断。示例：
 
 ```bash
 python run.py --model-id "gpt-4o" "你的问题"
@@ -222,6 +337,8 @@ python run.py --model-id "deepseek/deepseek-chat" "你的问题"
 python run.py --model-id "ollama/mistral" "你的问题"  # 本地模型
 ```
 
+`max_completion_tokens` 自动 clamp 到每个模型公布的输出上限（完整表见 `scripts/model_routing.py`）。切换到小 cap 模型时不需要手动改配置。
+
 > [!WARNING]
 > `o1` 模型需要 OpenAI tier-3 API 访问权限：https://help.openai.com/en/articles/10362446-api-access-to-o1-and-o3-mini
 
@@ -229,12 +346,13 @@ python run.py --model-id "ollama/mistral" "你的问题"  # 本地模型
 
 | 引擎 | 需要密钥 | 备注 |
 |---|---|---|
-| `DDGS` | 否 | 默认，免费 DuckDuckGo |
-| `META_SOTA` | 是 | MetaSo，对中文查询效果更好 |
-| `SERPAPI` | 是 | 通过 SerpAPI 使用 Google |
-| `BOCHA` | 是 | 博查 AI（Bocha），针对中文优化的网页搜索 |
+| `DDGS` | 否 | DuckDuckGo，免费，默认。 |
+| `TAVILY` | 是 | Tavily，英文查询结果质量通常最好。 |
+| `META_SOTA` | 是 | MetaSo，针对中文查询优化。 |
+| `SERPAPI` | 是 | 通过 SerpAPI 使用 Google。 |
+| `BOCHA` | 是 | 博查 AI（Bocha），针对中文优化的网页搜索。 |
 
-可配置多个引擎并自动降级 —— 智能体按顺序尝试。
+可在 `search.providers[]` 中列多个 —— 智能体按顺序尝试，遇到空结果或报错则降级到下一个。
 
 ---
 
