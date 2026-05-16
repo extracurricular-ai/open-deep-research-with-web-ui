@@ -87,21 +87,13 @@ explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = [
-    "smolagents",
     "smolagents.*",
     "serpapi",
-    "serpapi.*",
     "tavily",
-    "tavily.*",
     "datasets",
-    "datasets.*",
     "pandas",
-    "pandas.*",
     "tqdm",
-    "tqdm.*",
     "flask_cors",
-    "flask_cors.*",
-    "mcp",
     "mcp.*",
 ]
 ignore_missing_imports = true
