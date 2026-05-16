@@ -82,14 +82,29 @@
 
 ## 为什么选择本项目？
 
-开源的 Deep Research 替代方案有很多，以下是本项目与它们的对比：
+- **一行 Docker 命令即装即用，无需配置** —— `docker run -p 5080:5080 ghcr.io/s2thend/open-deep-research-with-ui:latest` 启动后立即可用。DuckDuckGo 搜索内置，只需一个模型 API 密钥即可开始研究。
+
+- **不依赖 LiteLLM** —— 仅直接调用 OpenAI + Anthropic 官方 SDK。移除了 LiteLLM 这个反复出现安全公告的中间翻译层。对企业 / 内网部署更安全。
+
+- **支持气隙环境、可自托管** —— 无遥测、无任何托管服务依赖，仅与你显式配置的模型和搜索 API 通信。配合 Ollama / LM Studio / vLLM 可完全离线运行在任何防火墙之内。
+
+- **为 fork 而生** —— smolagents 之上约 3K 行 Python。新增工具只需往 `scripts/` 丢一个文件；切换 provider 改 `scripts/model_routing.py`；钩进 agent step callbacks（见 `scripts/compaction.py`）。是*你自己*内部研究 agent 的起点，不是封闭产品。
+
+- **多搜索 provider 自动降级** —— 开箱即用接入 DDGS、Tavily、SerpAPI、MetaSo、博查。配置为有序列表后，agent 会在结果为空或撞 rate-limit 时自动顺降。跨区域、中国托管、气隙环境全部友好。
+
+- **并行后台研究** —— 本领域最独特的功能。同时运行多个研究任务，每个都持久化到 SQLite。关闭浏览器，数小时后回来，结果还在。其他开源深度研究工具均不支持此工作流。
+
+### 与其他方案对比
 
 | 功能 | **本项目** | [nickscamara/open-deep-research](https://github.com/nickscamara/open-deep-research) | [gpt-researcher](https://github.com/assafelovic/gpt-researcher) | [langchain/open_deep_research](https://github.com/langchain-ai/open_deep_research) | [smolagents](https://github.com/huggingface/smolagents) |
 |---|---|---|---|---|---|
 | **Docker / 一键部署** | ✅ GHCR 预构建镜像 | ✅ Dockerfile | ✅ Docker Compose | ❌ 手动部署 | ❌ 仅库文件 |
+| **不依赖 LiteLLM** | ✅ 直接 OpenAI + Anthropic SDK | ⚠️ AI SDK 层 | ⚠️ | ⚠️ langchain 层 | ✅ |
+| **气隙 / 内网部署** | ✅ 无遥测、无外部依赖 | ⚠️ 依赖 Firecrawl | ⚠️ 默认走云 | ⚠️ LangGraph Studio | ✅ |
+| **多 provider 搜索带降级** | ✅ DDGS + Tavily + SerpAPI + MetaSo + 博查 | ❌ 仅 Firecrawl | ⚠️ 单次单 provider | ⚠️ 可配置 | ⚠️ DIY |
+| **区域性模型 provider** | ✅ DeepSeek 一等支持 | ⚠️ 偏美国 | ⚠️ 偏美国 | ⚠️ 偏美国 | ✅ |
 | **无需构建前端** | ✅ Preact + htm（无需构建） | ❌ 需要 Next.js 构建 | ❌ 需要 Next.js 构建 | ❌ LangGraph Studio | — |
 | **开箱即用免费搜索** | ✅ DuckDuckGo（无需密钥） | ❌ 需要 Firecrawl API | ⚠️ 推荐使用密钥 | ⚠️ 可配置 | ✅ |
-| **模型无关** | ✅ ОреnАI, Аnthrорiс, DеерSееk, Оllаmа | ✅ AI SDK 提供商 | ✅ 多种提供商 | ✅ 可配置 | ✅ |
 | **本地模型支持** | ✅ Ollama、LM Studio | ⚠️ 有限 | ✅ Ollama/Groq | ✅ | ✅ |
 | **并行后台任务** | ✅ 多任务同时运行 | ❌ | ❌ | ❌ | ❌ |
 | **会话历史 / 回放** | ✅ SQLite 支持 | ❌ | ❌ | ❌ | ❌ |
@@ -97,14 +112,6 @@
 | **视觉 / 图像分析** | ✅ PDF 截图、视觉问答 | ❌ | ⚠️ 有限 | ❌ | ⚠️ |
 | **音频 / YouTube** | ✅ 转录、语音 | ❌ | ❌ | ❌ | ❌ |
 | **GAIA 基准分数** | **55% pass@1** | — | — | — | 55%（原始） |
-
-### 本项目的核心优势
-
-- **并行后台研究** —— 本领域最独特的功能。同时启动多个深度研究任务 —— 每个任务作为独立子进程运行，将所有事件持久化到 SQLite，可独立监控或回放。关闭浏览器，数小时后返回，结果依然等待着你。其他开源深度研究工具均不支持此工作流。
-- **单条 `docker run` 部署** —— GHCR 预构建镜像可在任何支持 Docker 的平台上运行：Linux、macOS、Windows、ARM、云虚拟机、树莓派。
-- **无需构建步骤** —— 前端使用带 `htm` 模板字面量的 Preact。无需 Node.js，无需 `npm install`，无需 webpack。直接打开浏览器。
-- **默认免费** —— DuckDuckGo 搜索无需 API 密钥，只需添加一个模型 API 密钥即可立即使用。
-- **更广泛的媒体支持** —— 处理其他项目留给用户自行解决的 PDF、图像、音频文件和 YouTube 字幕。
 
 ---
 

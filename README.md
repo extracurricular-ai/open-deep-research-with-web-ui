@@ -84,14 +84,29 @@ This is particularly useful for:
 
 ## Why This Project?
 
-There are several open-source Deep Research alternatives. Here's how this project compares:
+- **One-command Docker install, zero config to start** — `docker run -p 5080:5080 ghcr.io/s2thend/open-deep-research-with-ui:latest` and a working web UI is up. DuckDuckGo search is built-in; one model API key is enough to begin.
+
+- **No LiteLLM dependency** — direct OpenAI + Anthropic SDK calls only. Removes the intermediary translation layer that LiteLLM has had repeated security advisories for. Safer for enterprise / internal deployments.
+
+- **Air-gap-friendly, self-hostable** — no telemetry, no external service dependencies beyond the model + search APIs you explicitly configure. Pair with Ollama / LM Studio / vLLM for fully offline operation behind any firewall.
+
+- **Built to be forked** — ~3K LOC Python on top of smolagents. Add a tool by dropping a file in `scripts/`; swap providers via `scripts/model_routing.py`; hook into agent step callbacks (see `scripts/compaction.py`). A starting point for *your* internal research agent, not a closed product.
+
+- **Multi-provider search with auto-fallback** — DDGS, Tavily, SerpAPI, MetaSo, Bocha — wired up out of the box. Configure as an ordered list; the agent walks the chain on empty results or rate-limit errors. Cross-regional, China-hosted, and air-gapped friendly.
+
+- **Parallel background research** — the most unique feature in this space. Run multiple research tasks simultaneously; each persists to SQLite. Close the browser, return hours later, results are waiting. No other open-source deep research tool supports this.
+
+### Comparison with alternatives
 
 | Feature | **This project** | [nickscamara/open-deep-research](https://github.com/nickscamara/open-deep-research) | [gpt-researcher](https://github.com/assafelovic/gpt-researcher) | [langchain/open_deep_research](https://github.com/langchain-ai/open_deep_research) | [smolagents](https://github.com/huggingface/smolagents) |
 |---|---|---|---|---|---|
 | **Docker / one-command deploy** | ✅ Pre-built image on GHCR | ✅ Dockerfile | ✅ Docker Compose | ❌ Manual | ❌ Library only |
+| **No LiteLLM dependency** | ✅ Direct OpenAI + Anthropic SDKs | ⚠️ AI SDK layer | ⚠️ | ⚠️ langchain layer | ✅ |
+| **Air-gapped / internal deploy** | ✅ No telemetry, no external deps | ⚠️ Depends on Firecrawl | ⚠️ Cloud-leaning defaults | ⚠️ LangGraph Studio | ✅ |
+| **Multi-provider search w/ fallback** | ✅ DDGS + Tavily + SerpAPI + MetaSo + Bocha | ❌ Firecrawl only | ⚠️ Single per run | ⚠️ Configurable | ⚠️ DIY |
+| **Regional model providers** | ✅ DeepSeek first-class | ⚠️ US-centric | ⚠️ US-centric | ⚠️ US-centric | ✅ |
 | **No-build frontend** | ✅ Preact + htm (no build step) | ❌ Next.js build required | ❌ Next.js build required | ❌ LangGraph Studio | — |
 | **Free search out of the box** | ✅ DuckDuckGo (no key needed) | ❌ Firecrawl API required | ⚠️ Key recommended | ⚠️ Configurable | ✅ |
-| **Model agnostic** | ✅ OpenAI, Anthropic, DeepSeek, Ollama | ✅ AI SDK providers | ✅ Multiple providers | ✅ Configurable | ✅ |
 | **Local model support** | ✅ Ollama, LM Studio | ⚠️ Limited | ✅ Ollama/Groq | ✅ | ✅ |
 | **Parallel background tasks** | ✅ Multiple simultaneous runs | ❌ | ❌ | ❌ | ❌ |
 | **Session history / replay** | ✅ SQLite-backed | ❌ | ❌ | ❌ | ❌ |
@@ -99,14 +114,6 @@ There are several open-source Deep Research alternatives. Here's how this projec
 | **Vision / image analysis** | ✅ PDF screenshots, visual QA | ❌ | ⚠️ Limited | ❌ | ⚠️ |
 | **Audio / YouTube** | ✅ Transcription, speech | ❌ | ❌ | ❌ | ❌ |
 | **GAIA benchmark score** | **55% pass@1** | — | — | — | 55% (original) |
-
-### Key advantages of this project
-
-- **Parallel background research** — the most unique feature in this space. Start multiple deep research tasks at the same time — each runs as an independent subprocess, persists all events to SQLite, and can be monitored or replayed independently. Close the browser, come back hours later, and your results are waiting. No other open-source deep research tool supports this workflow.
-- **Single `docker run` deployment** — pre-built image on GHCR works on any platform with Docker: Linux, macOS, Windows, ARM, cloud VMs, Raspberry Pi.
-- **No build step** — the frontend uses Preact with `htm` template literals. No Node.js, no `npm install`, no webpack. Just open the browser.
-- **Free by default** — DuckDuckGo search requires no API key, so the agent works immediately after adding just one model API key.
-- **Broader media support** — handles PDFs, images, audio files, and YouTube transcripts that other projects leave to the user.
 
 ---
 

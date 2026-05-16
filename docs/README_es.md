@@ -82,14 +82,29 @@ Es especialmente útil para:
 
 ## ¿Por qué este proyecto?
 
-Hay varias alternativas open source a Deep Research. Así es como se compara este proyecto:
+- **Instalación Docker en un comando, cero config para empezar** — `docker run -p 5080:5080 ghcr.io/s2thend/open-deep-research-with-ui:latest` y una UI web funcionando está arriba. Búsqueda DuckDuckGo integrada; una sola clave API de modelo basta para empezar.
+
+- **Sin dependencia de LiteLLM** — solo llamadas directas a los SDKs oficiales de OpenAI + Anthropic. Elimina la capa intermedia de traducción LiteLLM que ha tenido avisos de seguridad recurrentes. Más seguro para despliegues empresariales / internos.
+
+- **Compatible con air-gap, auto-alojable** — sin telemetría, sin dependencias de servicios gestionados más allá de las APIs de modelo y búsqueda que configuras explícitamente. Combínalo con Ollama / LM Studio / vLLM para operación completamente offline tras cualquier firewall.
+
+- **Diseñado para ser forkeado** — ~3K LOC de Python sobre smolagents. Añade una herramienta soltando un archivo en `scripts/`; cambia proveedor vía `scripts/model_routing.py`; engancha los step callbacks del agente (ver `scripts/compaction.py`). Un punto de partida para *tu* agente de investigación interno, no un producto cerrado.
+
+- **Búsqueda multi-proveedor con fallback automático** — DDGS, Tavily, SerpAPI, MetaSo, Bocha — cableados de fábrica. Configúralos como lista ordenada; el agente recorre la cadena en resultados vacíos o errores de rate-limit. Apto para equipos inter-regionales, despliegues alojados en China y entornos air-gap.
+
+- **Investigación paralela en segundo plano** — la característica más única en este espacio. Ejecuta múltiples tareas de investigación simultáneamente; cada una persiste en SQLite. Cierra el navegador, vuelve horas después, los resultados te esperan. Ninguna otra herramienta de deep research open source soporta este workflow.
+
+### Comparativa con alternativas
 
 | Característica | **Este proyecto** | [nickscamara/open-deep-research](https://github.com/nickscamara/open-deep-research) | [gpt-researcher](https://github.com/assafelovic/gpt-researcher) | [langchain/open_deep_research](https://github.com/langchain-ai/open_deep_research) | [smolagents](https://github.com/huggingface/smolagents) |
 |---|---|---|---|---|---|
 | **Docker / despliegue en un comando** | ✅ Imagen pre-construida en GHCR | ✅ Dockerfile | ✅ Docker Compose | ❌ Manual | ❌ Solo biblioteca |
+| **Sin dependencia de LiteLLM** | ✅ SDKs OpenAI + Anthropic directos | ⚠️ Capa AI SDK | ⚠️ | ⚠️ Capa langchain | ✅ |
+| **Despliegue air-gap / red interna** | ✅ Sin telemetría, sin deps externas | ⚠️ Depende de Firecrawl | ⚠️ Por defecto va a la nube | ⚠️ LangGraph Studio | ✅ |
+| **Búsqueda multi-proveedor con fallback** | ✅ DDGS + Tavily + SerpAPI + MetaSo + Bocha | ❌ Solo Firecrawl | ⚠️ Uno por ejecución | ⚠️ Configurable | ⚠️ DIY |
+| **Proveedores de modelos regionales** | ✅ DeepSeek de primera clase | ⚠️ Céntrico US | ⚠️ Céntrico US | ⚠️ Céntrico US | ✅ |
 | **Frontend sin compilación** | ✅ Preact + htm (sin paso de compilación) | ❌ Requiere compilación Next.js | ❌ Requiere compilación Next.js | ❌ LangGraph Studio | — |
 | **Búsqueda gratuita de inmediato** | ✅ DuckDuckGo (sin clave necesaria) | ❌ Requiere API Firecrawl | ⚠️ Clave recomendada | ⚠️ Configurable | ✅ |
-| **Agnóstico en modelos** | ✅ OpenAI, Anthropic, DeepSeek, Ollama | ✅ Proveedores AI SDK | ✅ Múltiples proveedores | ✅ Configurable | ✅ |
 | **Soporte de modelos locales** | ✅ Ollama, LM Studio | ⚠️ Limitado | ✅ Ollama/Groq | ✅ | ✅ |
 | **Tareas paralelas en segundo plano** | ✅ Múltiples ejecuciones simultáneas | ❌ | ❌ | ❌ | ❌ |
 | **Historial / reproducción de sesiones** | ✅ Basado en SQLite | ❌ | ❌ | ❌ | ❌ |
@@ -97,14 +112,6 @@ Hay varias alternativas open source a Deep Research. Así es como se compara est
 | **Análisis visual / imágenes** | ✅ Capturas de PDF, QA visual | ❌ | ⚠️ Limitado | ❌ | ⚠️ |
 | **Audio / YouTube** | ✅ Transcripción, voz | ❌ | ❌ | ❌ | ❌ |
 | **Puntuación de referencia GAIA** | **55% pass@1** | — | — | — | 55% (original) |
-
-### Ventajas clave de este proyecto
-
-- **Investigación paralela en segundo plano** — la característica más única en este espacio. Inicia múltiples tareas de investigación profunda al mismo tiempo — cada una se ejecuta como un subproceso independiente, persiste todos los eventos en SQLite, y puede monitorearse o reproducirse independientemente. Cierra el navegador, regresa horas después, y tus resultados te esperan. Ninguna otra herramienta de investigación profunda open source soporta este flujo de trabajo.
-- **Despliegue con un solo `docker run`** — la imagen pre-construida en GHCR funciona en cualquier plataforma con Docker: Linux, macOS, Windows, ARM, VMs en la nube, Raspberry Pi.
-- **Sin paso de compilación** — el frontend usa Preact con literales de plantilla `htm`. Sin Node.js, sin `npm install`, sin webpack. Solo abre el navegador.
-- **Gratuito por defecto** — la búsqueda DuckDuckGo no requiere clave API, por lo que el agente funciona inmediatamente después de agregar solo una clave API de modelo.
-- **Soporte de medios más amplio** — maneja PDFs, imágenes, archivos de audio y transcripciones de YouTube que otros proyectos dejan al usuario.
 
 ---
 
