@@ -4,6 +4,8 @@
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
 
+**官方搜索支持：** <a href="https://duckduckgo.com/"><img src="https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png" height="22" alt="DuckDuckGo" /></a>
+
 [OpenAI Deep Research](https://openai.com/index/introducing-deep-research/) 的开源复现，配备现代化 Web UI —— 基于 [HuggingFace smolagents](https://github.com/huggingface/smolagents/tree/main/examples) 改编，配置简化，易于自部署。
 
 原始实现详见 [HuggingFace 博客文章](https://huggingface.co/blog/open-deep-research)。

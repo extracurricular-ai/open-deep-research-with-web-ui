@@ -4,6 +4,8 @@
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
 
+**Soporte de búsqueda oficial:** <a href="https://duckduckgo.com/"><img src="https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png" height="22" alt="DuckDuckGo" /></a>
+
 Una replicación abierta de [Deep Research de OpenAI](https://openai.com/index/introducing-deep-research/) con una interfaz web moderna — adaptada de [HuggingFace smolagents](https://github.com/huggingface/smolagents/tree/main/examples) con configuración simplificada para fácil auto-alojamiento.
 
 Lee más sobre la implementación original en el [artículo del blog de HuggingFace](https://huggingface.co/blog/open-deep-research).
