@@ -390,12 +390,41 @@ async function extractSessionId(response) {
  * Read a coupled SSE stream for LIVE mode (single session, blocks UI).
  * Used by live mode and for background /live reconnect.
  */
+function queuedMessage(position) {
+    return position != null && position > 0 ? `Queued · position ${position}` : 'Queued…';
+}
+
+/**
+ * Map a terminal session status (from a {done, status} SSE message) to a
+ * user-facing completion message. Falls back to the hasError-based wording when
+ * no status is provided (older streams / coupled EOF).
+ */
+function completionStatus(terminalStatus, hasError) {
+    switch (terminalStatus) {
+        case 'failed':
+            return { message: 'Run failed to start', type: 'error' };
+        case 'stopped':
+            return { message: 'Stopped by user', type: 'error' };
+        case 'interrupted':
+            return { message: 'Interrupted', type: 'error' };
+        case 'completed':
+        default:
+            return {
+                message: hasError ? 'Completed with errors' : 'Completed successfully',
+                type: hasError ? 'error' : 'success',
+            };
+    }
+}
+
 async function readBlockingSSEStream(response) {
     const reader = response.body.getReader();
     currentReader = reader;
     const decoder = new TextDecoder();
     let buffer = '';
     let hasError = false;
+    // A coupled (live) submit can come back 'queued' when at capacity: no
+    // subprocess was started, so we switch to the DB-backed /live stream below.
+    let queuedSwitchId = null;
 
     try {
         while (true) {
@@ -403,12 +432,9 @@ async function readBlockingSSEStream(response) {
             const { done, value } = await reader.read();
 
             if (done) {
-                setState({
-                    status: {
-                        message: hasError ? 'Completed with errors' : 'Completed successfully',
-                        type: hasError ? 'error' : 'success',
-                    },
-                });
+                if (!queuedSwitchId) {
+                    setState({ status: completionStatus(null, hasError) });
+                }
                 break;
             }
 
@@ -419,13 +445,14 @@ async function readBlockingSSEStream(response) {
                 if (jsonData.session_id) {
                     setState({ sessionId: jsonData.session_id, activeSessionId: jsonData.session_id });
                     loadSessions();
+                    if (jsonData.status === 'queued') {
+                        queuedSwitchId = jsonData.session_id;
+                        setState({ status: { message: queuedMessage(jsonData.position), type: 'loading' } });
+                    }
+                } else if (jsonData.type === 'queue_status') {
+                    setState({ status: { message: queuedMessage(jsonData.position), type: 'loading' } });
                 } else if (jsonData.done) {
-                    setState({
-                        status: {
-                            message: hasError ? 'Completed with errors' : 'Completed successfully',
-                            type: hasError ? 'error' : 'success',
-                        },
-                    });
+                    setState({ status: completionStatus(jsonData.status, hasError) });
                     shouldBreak = true;
                 } else {
                     addEvent(jsonData);
@@ -439,6 +466,11 @@ async function readBlockingSSEStream(response) {
         }
     } finally {
         currentReader = null;
+    }
+
+    // Coupled submit was queued — wait on the /live stream until it is promoted.
+    if (queuedSwitchId && !state.isStopped) {
+        await connectToLiveStream(queuedSwitchId);
     }
 }
 
@@ -567,6 +599,8 @@ export async function startStream() {
             const decoder = new TextDecoder();
             let buffer = '';
             let sessionId = null;
+            let queued = false;
+            let queuePosition = null;
 
             // Read until we get session_id
             while (!sessionId) {
@@ -574,12 +608,49 @@ export async function startStream() {
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
                 buffer = parseSSELines(buffer, (data) => {
-                    if (data.session_id) sessionId = data.session_id;
+                    if (data.session_id) {
+                        sessionId = data.session_id;
+                        if (data.status === 'queued') {
+                            queued = true;
+                            queuePosition = data.position;
+                        }
+                    }
                 });
             }
 
             if (!sessionId) {
                 setState({ status: { message: 'Failed to get session ID', type: 'error' } });
+                return;
+            }
+
+            // At capacity — the run was queued (no subprocess started). Watch it
+            // via the DB-backed /live stream until the dispatcher promotes it;
+            // there is nothing to read on this connection.
+            if (queued) {
+                try { reader.cancel(); } catch (e) { /* ignore */ }
+                cachedEvents = null;
+                cachedTree = [];
+                setState({
+                    events: [],
+                    question: q,
+                    selectedModel: model,
+                    sessionId: sessionId,
+                    activeSessionId: sessionId,
+                    viewingHistory: false,
+                    isRunning: false,
+                    isStopped: false,
+                    finalAnswer: null,
+                    totalStartTime: Date.now(),
+                    viewingLiveSession: true,
+                    status: { message: queuedMessage(queuePosition), type: 'loading' },
+                });
+                loadSessions();
+                try {
+                    await connectToLiveStream(sessionId);
+                } finally {
+                    setState({ viewingLiveSession: false });
+                    loadSessions();
+                }
                 return;
             }
 
@@ -717,9 +788,16 @@ export async function stopSession(sessionId) {
         }
     }
 
+    // Mark stopped for the currently-viewed session even if there is no active
+    // reader yet (e.g. mid-reconnect: between one /live fetch resolving and the
+    // next read loop assigning currentReader). The read loops check isStopped
+    // and bail, so the stop is not lost in that window.
+    if (state.activeSessionId === sessionId || state.sessionId === sessionId) {
+        setState({ isStopped: true });
+    }
+
     // If it's the current blocking reader (live/background mode)
     if (currentReader) {
-        setState({ isStopped: true });
         try { currentReader.cancel(); } catch (e) { /* ignore */ }
         currentReader = null;
     }
@@ -843,9 +921,10 @@ export async function loadSession(sessionId) {
         cachedEvents = null;
         cachedTree = [];
 
-        // If session is still running (background persistent), reconnect via /live
-        if (session.status === 'running') {
+        // Still running (background persistent) or queued — reconnect via /live.
+        if (session.status === 'running' || session.status === 'queued') {
             const eventCount = (session.events || []).length;
+            const isQueued = session.status === 'queued';
             setState({
                 events: session.events || [],
                 question: session.question,
@@ -858,7 +937,12 @@ export async function loadSession(sessionId) {
                 finalAnswer: null,
                 totalStartTime: Date.now(),
                 viewingLiveSession: true,
-                status: { message: 'Reconnected to running agent...', type: 'loading' },
+                status: {
+                    message: isQueued
+                        ? queuedMessage(session.queue_position)
+                        : 'Reconnected to running agent...',
+                    type: 'loading',
+                },
             });
 
             try {

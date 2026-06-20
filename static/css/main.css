@@ -573,6 +573,8 @@ select {
 .sidebar-status-interrupted { color: var(--text-3); }
 .sidebar-status-stopped { color: var(--text-3); }
 .sidebar-status-imported { color: var(--info); }
+.sidebar-status-queued { color: var(--info); }
+.sidebar-status-failed { color: var(--error); }
 
 .sidebar-item-question {
     flex: 1;
@@ -628,6 +630,18 @@ select {
 @keyframes pulse-live {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+}
+
+.sidebar-queued-badge {
+    font-size: var(--fs-xs);
+    color: var(--info);
+    background: rgba(68, 136, 255, 0.1);
+    border: 1px solid rgba(68, 136, 255, 0.2);
+    padding: 0 4px;
+    border-radius: var(--rad);
+    margin-left: var(--sp-1);
+    font-weight: 500;
+    letter-spacing: 0.05em;
 }
 
 .sidebar-item-preview {
