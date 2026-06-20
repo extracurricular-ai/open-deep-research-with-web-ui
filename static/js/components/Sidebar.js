@@ -24,6 +24,8 @@ function statusIcon(status) {
         case 'interrupted': return '\u25CB';
         case 'stopped':   return '\u25A0';
         case 'imported':  return '\u2192';
+        case 'queued':    return '\u2026';
+        case 'failed':    return '\u2717';
         default:          return '\u25CF';
     }
 }
@@ -91,6 +93,9 @@ export function Sidebar() {
                             ${formatDate(s.created_at)} \u2022 ${s.model_id}
                             ${(s.status === 'running' || isSessionLive(s.id)) && html`
                                 <span class="sidebar-live-badge">LIVE</span>
+                            `}
+                            ${s.status === 'queued' && html`
+                                <span class="sidebar-queued-badge">QUEUED</span>
                             `}
                         </div>
                         ${s.final_answer_preview && html`

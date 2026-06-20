@@ -323,6 +323,8 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | Anthropic key. Same fallback rule. |
 | `DEEPSEEK_API_KEY` | DeepSeek key. Same fallback rule. |
 | `HF_TOKEN` | HuggingFace token. Same fallback for `other_keys.hf_token`. |
+| `ODR_MAX_CONCURRENT` | Max research sessions running at once. Extra submissions are queued (FIFO) and auto-started as slots free. Defaults to `16`; floor of `1`, no upper limit — tune to your provider rate limits and memory. Enforced globally across all Gunicorn workers via SQLite. |
+| `ODR_DB_PATH` | Path to the SQLite session database. Defaults to `odr_sessions.db` next to the app. |
 | `DEBUG` | Enable debug logging (`false` by default). |
 | `LOG_LEVEL` | Log verbosity — `DEBUG`, `INFO`, `WARNING`, `ERROR` (`INFO` by default). |
 
