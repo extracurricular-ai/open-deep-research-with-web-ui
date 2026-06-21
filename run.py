@@ -32,8 +32,16 @@ from smolagents import (
     ToolCallingAgent,
 )
 from scripts.anthropic_model import AnthropicModel
-from scripts.compaction import make_per_step_summarizer, make_plan_consolidator
-from scripts.model_routing import get_model_routing, get_model_max_output_tokens
+from scripts.compaction import (
+    make_per_step_summarizer,
+    make_plan_consolidator,
+    make_memory_budget_trimmer,
+)
+from scripts.model_routing import (
+    get_model_routing,
+    get_model_max_output_tokens,
+    get_model_context_window,
+)
 
 # --- JSON protocol for structured output ---
 # Save real stdout for JSON events, redirect sys.stdout to stderr
@@ -637,6 +645,7 @@ def create_agent(cfg):
         # summarizer_model_id override is not yet wired (would require
         # constructing a second model). For now always use the main model,
         # which matches the user-selected design.
+        harvest_cap = max(1, cmp_cfg.get("ledger_harvest_cap", 50))
         summarizer_cb = make_per_step_summarizer(
             model=model,
             main_model_id=model_id,
@@ -644,6 +653,7 @@ def create_agent(cfg):
             summary_max_tokens=cmp_cfg.get("summary_max_tokens", 600),
             summary_input_cap_tokens=cmp_cfg.get("summary_input_cap_tokens", 6000),
             max_retries=cmp_cfg.get("max_retries", 10),
+            ledger_harvest_cap=harvest_cap,
         )
         consolidator_cb = make_plan_consolidator(
             model=model,
@@ -651,9 +661,34 @@ def create_agent(cfg):
             plan_keep_back=cmp_cfg.get("plan_keep_back", 3),
             gap_summary_max_tokens=cmp_cfg.get("gap_summary_max_tokens", 500),
             max_retries=cmp_cfg.get("max_retries", 10),
+            ledger_harvest_cap=harvest_cap,
         )
+        action_cbs = [_step_callbacks[ActionStep], summarizer_cb]
+        # Layer 3: hard context-budget fuse. Registered AFTER the emit + summarizer
+        # callbacks so (a) on_action_step still persists full pre-compaction content
+        # to the DB and (b) the current step is summarized before we measure history.
+        if cmp_cfg.get("l3_enabled", True):
+            ctx_window = get_model_context_window(model_id) or cmp_cfg.get(
+                "default_context_window", 128000
+            )
+            budget_cb = make_memory_budget_trimmer(
+                main_model_id=model_id,
+                context_window=ctx_window,
+                reserve_tokens=max(0, cmp_cfg.get("context_reserve_tokens", 20000)),
+                trim_headroom_tokens=max(0, cmp_cfg.get("trim_headroom_tokens", 40000)),
+                keep_last_k=max(1, cmp_cfg.get("keep_last_k", 4)),
+                observation_max_tokens=max(
+                    1, cmp_cfg.get("l3_observation_max_tokens", 300)
+                ),
+                ledger_harvest_cap=harvest_cap,
+                ledger_max_entries=max(1, cmp_cfg.get("ledger_max_entries", 200)),
+                ledger_render_max_tokens=max(
+                    1, cmp_cfg.get("ledger_render_max_tokens", 4000)
+                ),
+            )
+            action_cbs.append(budget_cb)
         step_callbacks = {
-            ActionStep: [_step_callbacks[ActionStep], summarizer_cb],
+            ActionStep: action_cbs,
             PlanningStep: [_step_callbacks[PlanningStep], consolidator_cb],
             FinalAnswerStep: _step_callbacks[FinalAnswerStep],
         }
@@ -750,6 +785,11 @@ def create_agent(cfg):
         "or omit key information gathered by search_agent. "
         "The final answer MUST include references (URLs/links) for all "
         "information when available. Use markdown link format for references.\n\n"
+        "Some tool observations may be compacted: facts can carry inline citation "
+        "tags like [S3], and a [source-ledger] block maps each [S#] tag to its full "
+        "URL. When you cite such a fact, resolve its [S#] tag to the matching URL "
+        "from the source ledger and render a normal markdown link. NEVER output a "
+        "bare [S#] tag in the final answer.\n\n"
         "Example final answer format:\n"
         "Mercedes Sosa released **40 studio albums** before 2007.\n\n"
         "Key albums include:\n"

@@ -41,7 +41,16 @@
     "summary_input_cap_tokens": 6000,
     "plan_keep_back": 3,
     "gap_summary_max_tokens": 500,
-    "max_retries": 10
+    "max_retries": 10,
+    "l3_enabled": true,
+    "context_reserve_tokens": 20000,
+    "default_context_window": 128000,
+    "trim_headroom_tokens": 40000,
+    "keep_last_k": 4,
+    "l3_observation_max_tokens": 300,
+    "ledger_harvest_cap": 50,
+    "ledger_max_entries": 200,
+    "ledger_render_max_tokens": 4000
   },
   "other_keys": {
     "hf_token": ""
