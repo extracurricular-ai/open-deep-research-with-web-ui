@@ -45,6 +45,8 @@ _MODEL_PROVIDER_MAP = {
     "deepseek-v3": "deepseek",
     "deepseek-v3.2": "deepseek",
     "deepseek-v4": "deepseek",
+    "deepseek-v4-flash": "deepseek",
+    "deepseek-v4-pro": "deepseek",
     # --- OpenAI (chat-relevant subset) ---
     "chatgpt-4o-latest": "openai",
     "gpt-3.5-turbo": "openai",
@@ -171,7 +173,11 @@ _MODEL_INFO = {
     "deepseek-r1": (131072, 8192, 5.5e-7, 2.19e-6),
     "deepseek-v3": (131072, 8192, 2.7e-7, 1.1e-6),
     "deepseek-v3.2": (131072, 8192, 2.7e-7, 1.1e-6),
+    # DeepSeek v4 family: 1M context. flash/pro (and any future variant) inherit
+    # this via the deepseek-v4* prefix fallback in _lookup_info.
     "deepseek-v4": (1000000, 8192, None, None),
+    "deepseek-v4-flash": (1000000, 8192, None, None),
+    "deepseek-v4-pro": (1000000, 8192, None, None),
     # --- OpenAI ---
     "chatgpt-4o-latest": (128000, 16384, 5e-6, 1.5e-5),
     "gpt-3.5-turbo": (16385, 4096, 5e-7, 1.5e-6),
@@ -283,9 +289,17 @@ def _lookup_info(model_id: str):
 
     Mirrors get_model_routing: an explicit "provider/model" prefix is unwrapped
     first, then the bare ID is looked up. Returns None for unknown models.
+
+    The DeepSeek v4 family (flash/pro/dated snapshots) all share the 1M-context
+    profile, so any unenumerated deepseek-v4* variant falls back to deepseek-v4.
     """
     bare = model_id.split("/", 1)[1] if "/" in model_id else model_id
-    return _MODEL_INFO.get(bare)
+    info = _MODEL_INFO.get(bare)
+    if info is not None:
+        return info
+    if bare.startswith("deepseek-v4"):
+        return _MODEL_INFO["deepseek-v4"]
+    return None
 
 
 def get_model_max_output_tokens(model_id: str) -> int | None:
