@@ -1006,6 +1006,29 @@ export async function deleteSession(sessionId) {
     }
 }
 
+export async function resumeSession(sessionId) {
+    setState({ status: { message: 'Resuming session...', type: 'loading' } });
+    try {
+        const response = await fetch(`/api/sessions/${sessionId}/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: 'Resume failed' }));
+            setState({ status: { message: `Resume failed: ${err.error}`, type: 'error' } });
+            return;
+        }
+
+        // Session is now running again with the same ID — reload it
+        setState({ activeSessionId: null, viewingHistory: false });
+        await loadSessions();
+        await loadSession(sessionId);
+    } catch (e) {
+        setState({ status: { message: `Resume error: ${e.message}`, type: 'error' } });
+    }
+}
+
 export async function newSession() {
     // In live mode while running, block new session (UI should prevent this too)
     if (state.isRunning && state.runMode === 'live') return;

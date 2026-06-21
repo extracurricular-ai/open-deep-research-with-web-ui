@@ -607,6 +607,27 @@ select {
     color: var(--error);
 }
 
+.sidebar-item-resume {
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--duration) var(--ease), color var(--duration) var(--ease);
+    padding: 2px 4px;
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+}
+
+.sidebar-item:hover .sidebar-item-resume {
+    opacity: 1;
+}
+
+.sidebar-item-resume:hover {
+    color: var(--accent);
+}
+
 .sidebar-item-meta {
     font-size: var(--fs-xs);
     color: var(--text-3);

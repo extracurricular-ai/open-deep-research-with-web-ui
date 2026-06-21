@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import os
+import sqlite3
 import sys
 import threading
 import requests
@@ -423,7 +424,100 @@ def parse_args():
         default=None,
         help="JSON string of merged config (passed by web_app)",
     )
+    parser.add_argument(
+        "--resume-session-id",
+        type=str,
+        default=None,
+        help="Session ID to resume from (injects prior findings as context)",
+    )
     return parser.parse_args()
+
+
+def build_resume_context(session_id, max_chars=16000):
+    """Extract prior findings from an interrupted session for warm-restart injection."""
+    from pathlib import Path
+
+    db_path = os.environ.get("ODR_DB_PATH", str(Path(__file__).parent / "odr_sessions.db"))
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT event_data FROM events WHERE session_id = ? ORDER BY event_order",
+            (session_id,),
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return ""
+
+    if not rows:
+        return ""
+
+    findings = []
+    last_plan = None
+
+    for row in rows:
+        try:
+            event = json.loads(row["event_data"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        etype = event.get("type")
+        if etype == "planning_step":
+            plan_text = event.get("plan")
+            if plan_text:
+                last_plan = plan_text
+        elif etype == "action_step":
+            agent_name = event.get("agent_name") or "manager"
+            step_num = event.get("step_number", "?")
+            obs = event.get("observations") or ""
+            output = event.get("action_output") or ""
+            content = obs or output
+            if content and not event.get("error"):
+                findings.append(f"[Step {step_num}] ({agent_name}): {content}")
+
+    if not findings and not last_plan:
+        return ""
+
+    parts = []
+    parts.append(
+        "=== PRIOR RESEARCH FINDINGS (interrupted session) ===\n"
+        "This is a RESUMED session. A previous run on this exact question was interrupted "
+        "after completing the research steps shown below.\n\n"
+        "CRITICAL INSTRUCTIONS FOR RESUMED SESSION:\n"
+        "1. DO NOT create a new research plan from scratch. The plan below was already validated.\n"
+        "2. DO NOT repeat any searches or lookups for information already found below.\n"
+        "3. Review the findings below and identify what is STILL MISSING to answer the question.\n"
+        "4. ONLY perform searches for the missing parts, then synthesize ALL findings "
+        "(both below and new) into a final answer.\n"
+        "5. If the findings below are already sufficient to answer the question, "
+        "proceed directly to writing the final answer."
+    )
+
+    if last_plan:
+        parts.append(f"\n--- Existing Research Plan (DO NOT recreate) ---\n{last_plan}")
+
+    if findings:
+        parts.append("\n--- Completed Research Findings ---")
+        parts.extend(findings)
+
+    parts.append("\n=== END PRIOR FINDINGS ===")
+
+    context = "\n".join(parts)
+
+    if len(context) > max_chars:
+        # Keep header + plan, truncate findings from the oldest
+        header_end = context.find("--- Key Findings ---")
+        if header_end > 0:
+            header_part = context[:header_end + len("--- Key Findings ---")]
+            footer = "\n=== END PRIOR FINDINGS ==="
+            budget = max_chars - len(header_part) - len(footer) - 50
+            # Take findings from the end (most recent)
+            findings_text = "\n".join(findings)
+            if len(findings_text) > budget:
+                findings_text = "[... earlier findings truncated ...]\n" + findings_text[-budget:]
+            context = header_part + "\n" + findings_text + footer
+
+    return context
 
 
 custom_role_conversions = {"tool-call": "assistant", "tool-response": "user"}
@@ -829,7 +923,14 @@ def main():
 
     agent = create_agent(cfg)
 
-    agent.run(args.question)
+    question = args.question
+    if args.resume_session_id:
+        max_ctx = cfg.get("resume", {}).get("max_context_chars", 16000)
+        resume_context = build_resume_context(args.resume_session_id, max_chars=max_ctx)
+        if resume_context:
+            question = resume_context + "\n\n" + question
+
+    agent.run(question)
 
 
 if __name__ == "__main__":

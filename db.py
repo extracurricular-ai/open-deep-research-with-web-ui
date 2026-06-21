@@ -341,3 +341,60 @@ def get_session_status(session_id):
             (session_id,),
         ).fetchone()
         return dict(row) if row else None
+
+
+RESUMABLE_STATUSES = ("interrupted", "stopped", "failed")
+
+
+def reopen_session_for_resume(session_id):
+    """Reset a terminal session back to 'running' for warm-restart resume.
+
+    Only transitions from a resumable status. Returns True if successful.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE sessions SET status = 'running', completed_at = NULL, "
+            "started_at = datetime('now') "
+            "WHERE id = ? AND status IN ('interrupted', 'stopped', 'failed')",
+            (session_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_max_event_order(session_id):
+    """Return the highest event_order for a session, or -1 if no events exist."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT MAX(event_order) as max_order FROM events WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        val = row["max_order"] if row else None
+        return val if val is not None else -1
+
+
+def get_session_for_resume(session_id):
+    """Fetch session metadata and events needed for warm-restart resume.
+
+    Returns None if the session doesn't exist or isn't in a resumable state.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT question, model_id, status, client_config FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if not row or row["status"] not in RESUMABLE_STATUSES:
+            return None
+
+        events = conn.execute(
+            "SELECT event_data FROM events WHERE session_id = ? ORDER BY event_order",
+            (session_id,),
+        ).fetchall()
+
+        return {
+            "question": row["question"],
+            "model_id": row["model_id"],
+            "status": row["status"],
+            "client_config": row["client_config"],
+            "events": [json.loads(e["event_data"]) for e in events],
+        }
