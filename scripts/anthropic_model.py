@@ -7,6 +7,7 @@ run.py can use Claude models.
 """
 
 import os
+import sys
 import time
 from typing import Any
 
@@ -31,6 +32,7 @@ class AnthropicModel(Model):
         max_tokens: int = 4096,
         custom_role_conversions: dict[str, str] | None = None,
         max_retries: int = 3,
+        enable_prompt_caching: bool = True,
         **kwargs,
     ):
         super().__init__(
@@ -38,8 +40,19 @@ class AnthropicModel(Model):
             custom_role_conversions=custom_role_conversions,
             **kwargs,
         )
+        # smolagents' base Model.__init__ does NOT store custom_role_conversions
+        # (it lands in self.kwargs), but generate() below reads
+        # self.custom_role_conversions — set it explicitly or every call AttributeErrors.
+        self.custom_role_conversions = custom_role_conversions or {}
         self.max_tokens = max_tokens
         self.max_retries = max_retries
+        # Anthropic prompt caching is opt-in: without cache_control breakpoints
+        # NOTHING is cached (unlike OpenAI/DeepSeek, which cache automatically).
+        # When enabled we mark the (stable) system+tools prefix and the growing
+        # conversation tail with `cache_control`, mirroring the recommended
+        # prefix-cache layout. Cache reads cost ~0.1x; verify via the
+        # [anthropic-cache] stderr line (cache_read_input_tokens).
+        self.enable_prompt_caching = enable_prompt_caching
         self.client = Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
 
     def generate(
@@ -78,6 +91,21 @@ class AnthropicModel(Model):
             )
             conv_messages.append({"role": role, "content": content})
 
+        # Prompt caching: mark the last non-empty conversation block so the whole
+        # growing message prefix is cached turn-over-turn (incremental hits). The
+        # 20-block lookback is fine — each agent step adds only a couple of blocks.
+        if self.enable_prompt_caching and conv_messages:
+            for m in reversed(conv_messages):
+                if isinstance(m["content"], str) and m["content"].strip():
+                    m["content"] = [
+                        {
+                            "type": "text",
+                            "text": m["content"],
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ]
+                    break
+
         # Build API kwargs
         api_kwargs: dict[str, Any] = {
             "model": self.model_id,
@@ -85,7 +113,18 @@ class AnthropicModel(Model):
             "max_tokens": kwargs.pop("max_tokens", self.max_tokens),
         }
         if system_text:
-            api_kwargs["system"] = system_text
+            if self.enable_prompt_caching:
+                # A breakpoint on the (stable) system block caches tools + system —
+                # the highest-value, byte-stable prefix across the whole run.
+                api_kwargs["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_text,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                api_kwargs["system"] = system_text
         if stop_sequences:
             api_kwargs["stop_sequences"] = stop_sequences
 
@@ -134,6 +173,21 @@ class AnthropicModel(Model):
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
         )
+
+        # Visibility into cache effectiveness — smolagents' TokenUsage has no field
+        # for these, so surface them on stderr. cache_read_input_tokens > 0 across
+        # turns confirms the prefix cache is hitting.
+        if self.enable_prompt_caching:
+            cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            cache_creation = (
+                getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+            )
+            print(
+                f"[anthropic-cache] read={cache_read} creation={cache_creation} "
+                f"input={response.usage.input_tokens} "
+                f"output={response.usage.output_tokens}",
+                file=sys.stderr,
+            )
 
         return ChatMessage(
             role=MessageRole.ASSISTANT,

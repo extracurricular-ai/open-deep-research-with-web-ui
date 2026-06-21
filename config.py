@@ -68,6 +68,26 @@ DEFAULTS = {
         # On compaction LLM failure, retry this many times before falling back
         # to head+tail truncation. Default 10 mirrors Claude Code's budget.
         "max_retries": 10,
+        # Layer 3: context-budget trimmer (hard overflow fuse) + source ledger.
+        # All limits below are default + floor, never a hard ceiling.
+        "l3_enabled": True,
+        # Trigger trimming when API input_tokens > model_context_window - reserve.
+        "context_reserve_tokens": 20000,
+        # Fallback window for models not in model_routing._MODEL_INFO.
+        "default_context_window": 128000,
+        # Hysteresis: when trimming fires, cut down to (budget - this) so it fires
+        # rarely (minimizing prefix-cache churn).
+        "trim_headroom_tokens": 40000,
+        # Most-recent steps never trimmed (keep recent findings + full URLs intact).
+        "keep_last_k": 4,
+        # Head/tail target size for an old observation after its URLs are harvested.
+        "l3_observation_max_tokens": 300,
+        # Per-step URL extraction cap during harvest (raises the old hardcoded 30).
+        "ledger_harvest_cap": 50,
+        # Soft cap on rendered ledger entries; referenced [S#] are never evicted.
+        "ledger_max_entries": 200,
+        # Token cap on the rendered ledger block (titles dropped, then truncated).
+        "ledger_render_max_tokens": 4000,
     },
     "other_keys": {
         "hf_token": "",
