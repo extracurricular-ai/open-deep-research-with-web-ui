@@ -44,6 +44,7 @@ _MODEL_PROVIDER_MAP = {
     "deepseek-r1": "deepseek",
     "deepseek-v3": "deepseek",
     "deepseek-v3.2": "deepseek",
+    "deepseek-v4": "deepseek",
     # --- OpenAI (chat-relevant subset) ---
     "chatgpt-4o-latest": "openai",
     "gpt-3.5-turbo": "openai",
@@ -128,102 +129,112 @@ PROVIDER_API_BASES = {
     "deepseek": "https://api.deepseek.com/v1",
 }
 
-# Per-model max output tokens (sourced from LiteLLM model_prices_and_context_window
-# and provider docs). Used to clamp the user-configured max_completion_tokens so
-# we don't 4xx on small-cap models when a research-friendly default is set.
-# Unknown models -> None (no cap, configured value passes through unchanged).
-_MODEL_MAX_OUTPUT_TOKENS = {
-    # --- Anthropic (standard caps; extended-thinking caps not used here) ---
-    "claude-3-haiku-20240307": 4096,
-    "claude-3-opus-20240229": 4096,
-    "claude-3-5-haiku-20241022": 8192,
-    "claude-3-5-sonnet-20241022": 8192,
-    "claude-3-7-sonnet-20250219": 64000,
-    "claude-4-opus-20250514": 32000,
-    "claude-4-sonnet-20250514": 64000,
-    "claude-haiku-4-5": 64000,
-    "claude-haiku-4-5-20251001": 64000,
-    "claude-opus-4-1": 32000,
-    "claude-opus-4-1-20250805": 32000,
-    "claude-opus-4-20250514": 32000,
-    "claude-opus-4-5": 64000,
-    "claude-opus-4-5-20251101": 64000,
-    "claude-opus-4-6": 64000,
-    "claude-opus-4-6-20260205": 64000,
-    "claude-sonnet-4-20250514": 64000,
-    "claude-sonnet-4-5": 64000,
-    "claude-sonnet-4-5-20250929": 64000,
-    "claude-sonnet-4-6": 64000,
-    # --- DeepSeek ---
-    "deepseek-chat": 8192,
-    "deepseek-coder": 8192,
-    "deepseek-reasoner": 8192,
-    "deepseek-r1": 8192,
-    "deepseek-v3": 8192,
-    "deepseek-v3.2": 8192,
+# Per-model metadata, sourced from LiteLLM model_prices_and_context_window.json and
+# provider docs. Each entry is a tuple:
+#
+#   (context_window, max_output_tokens, input_cost_per_token, output_cost_per_token)
+#
+#   - context_window         : total input+output context window (max_input_tokens)
+#   - max_output_tokens      : published max output cap (used to clamp max_completion_tokens)
+#   - input_cost_per_token   : USD per input token (per-MTok / 1e6); None if not tracked
+#   - output_cost_per_token  : USD per output token; None if not tracked
+#
+# Unknown models -> None (callers fall back to configured / default values).
+# NOTE: prices drift; treat costs as best-effort. context_window/max_output drive
+# correctness (context budgeting + output clamping) and are kept accurate.
+_MODEL_INFO = {
+    # --- Anthropic (200k context for all current Claude models) ---
+    "claude-3-haiku-20240307": (200000, 4096, 2.5e-7, 1.25e-6),
+    "claude-3-opus-20240229": (200000, 4096, 1.5e-5, 7.5e-5),
+    "claude-3-5-haiku-20241022": (200000, 8192, 8e-7, 4e-6),
+    "claude-3-5-sonnet-20241022": (200000, 8192, 3e-6, 1.5e-5),
+    "claude-3-7-sonnet-20250219": (200000, 64000, 3e-6, 1.5e-5),
+    "claude-4-opus-20250514": (200000, 32000, 1.5e-5, 7.5e-5),
+    "claude-4-sonnet-20250514": (200000, 64000, 3e-6, 1.5e-5),
+    "claude-haiku-4-5": (200000, 64000, 1e-6, 5e-6),
+    "claude-haiku-4-5-20251001": (200000, 64000, 1e-6, 5e-6),
+    "claude-opus-4-1": (200000, 32000, 1.5e-5, 7.5e-5),
+    "claude-opus-4-1-20250805": (200000, 32000, 1.5e-5, 7.5e-5),
+    "claude-opus-4-20250514": (200000, 32000, 1.5e-5, 7.5e-5),
+    "claude-opus-4-5": (200000, 64000, 5e-6, 2.5e-5),
+    "claude-opus-4-5-20251101": (200000, 64000, 5e-6, 2.5e-5),
+    "claude-opus-4-6": (200000, 64000, 5e-6, 2.5e-5),
+    "claude-opus-4-6-20260205": (200000, 64000, 5e-6, 2.5e-5),
+    "claude-sonnet-4-20250514": (200000, 64000, 3e-6, 1.5e-5),
+    "claude-sonnet-4-5": (200000, 64000, 3e-6, 1.5e-5),
+    "claude-sonnet-4-5-20250929": (200000, 64000, 3e-6, 1.5e-5),
+    "claude-sonnet-4-6": (200000, 64000, 3e-6, 1.5e-5),
+    # --- DeepSeek (v3/chat-class: 128k; v4 series: 1M) ---
+    "deepseek-chat": (131072, 8192, 2.7e-7, 1.1e-6),
+    "deepseek-reasoner": (131072, 8192, 5.5e-7, 2.19e-6),
+    "deepseek-coder": (131072, 8192, 2.7e-7, 1.1e-6),
+    "deepseek-r1": (131072, 8192, 5.5e-7, 2.19e-6),
+    "deepseek-v3": (131072, 8192, 2.7e-7, 1.1e-6),
+    "deepseek-v3.2": (131072, 8192, 2.7e-7, 1.1e-6),
+    "deepseek-v4": (1000000, 8192, None, None),
     # --- OpenAI ---
-    "chatgpt-4o-latest": 16384,
-    "gpt-3.5-turbo": 4096,
-    "gpt-3.5-turbo-0125": 4096,
-    "gpt-3.5-turbo-1106": 4096,
-    "gpt-3.5-turbo-16k": 16384,
-    "gpt-4": 8192,
-    "gpt-4-0125-preview": 4096,
-    "gpt-4-0314": 8192,
-    "gpt-4-0613": 8192,
-    "gpt-4-1106-preview": 4096,
-    "gpt-4-turbo": 4096,
-    "gpt-4-turbo-2024-04-09": 4096,
-    "gpt-4-turbo-preview": 4096,
-    "gpt-4.1": 32768,
-    "gpt-4.1-2025-04-14": 32768,
-    "gpt-4.1-mini": 32768,
-    "gpt-4.1-mini-2025-04-14": 32768,
-    "gpt-4.1-nano": 32768,
-    "gpt-4.1-nano-2025-04-14": 32768,
-    "gpt-4o": 4096,
-    "gpt-4o-2024-05-13": 4096,
-    "gpt-4o-2024-08-06": 16384,
-    "gpt-4o-2024-11-20": 16384,
-    "gpt-4o-mini": 16384,
-    "gpt-4o-mini-2024-07-18": 16384,
-    "gpt-4o-search-preview": 16384,
-    "gpt-4o-search-preview-2025-03-11": 16384,
-    "gpt-4o-mini-search-preview": 16384,
-    "gpt-4o-mini-search-preview-2025-03-11": 16384,
-    "gpt-5": 128000,
-    "gpt-5-2025-08-07": 128000,
-    "gpt-5-mini": 128000,
-    "gpt-5-mini-2025-08-07": 128000,
-    "gpt-5-nano": 128000,
-    "gpt-5-nano-2025-08-07": 128000,
-    "gpt-5-pro": 272000,
-    "gpt-5-pro-2025-10-06": 272000,
-    "gpt-5.1": 128000,
-    "gpt-5.1-2025-11-13": 128000,
-    "gpt-5.2": 128000,
-    "gpt-5.2-2025-12-11": 128000,
-    "gpt-5.2-pro": 272000,
-    "gpt-5.2-pro-2025-12-11": 272000,
-    "gpt-5.4": 128000,
-    "gpt-5.4-2026-03-05": 128000,
-    "gpt-5.4-mini": 128000,
-    "gpt-5.4-nano": 128000,
-    "gpt-5.4-pro": 272000,
-    "gpt-5.4-pro-2026-03-05": 272000,
-    "o1": 100000,
-    "o1-2024-12-17": 100000,
-    "o1-pro": 100000,
-    "o1-pro-2025-03-19": 100000,
-    "o3": 100000,
-    "o3-2025-04-16": 100000,
-    "o3-mini": 100000,
-    "o3-mini-2025-01-31": 100000,
-    "o3-pro": 100000,
-    "o3-pro-2025-06-10": 100000,
-    "o4-mini": 100000,
-    "o4-mini-2025-04-16": 100000,
-    "codex-mini-latest": 100000,
+    "chatgpt-4o-latest": (128000, 16384, 5e-6, 1.5e-5),
+    "gpt-3.5-turbo": (16385, 4096, 5e-7, 1.5e-6),
+    "gpt-3.5-turbo-0125": (16385, 4096, 5e-7, 1.5e-6),
+    "gpt-3.5-turbo-1106": (16385, 4096, 1e-6, 2e-6),
+    "gpt-3.5-turbo-16k": (16385, 16384, 3e-6, 4e-6),
+    "gpt-4": (8192, 8192, 3e-5, 6e-5),
+    "gpt-4-0125-preview": (128000, 4096, 1e-5, 3e-5),
+    "gpt-4-0314": (8192, 8192, 3e-5, 6e-5),
+    "gpt-4-0613": (8192, 8192, 3e-5, 6e-5),
+    "gpt-4-1106-preview": (128000, 4096, 1e-5, 3e-5),
+    "gpt-4-turbo": (128000, 4096, 1e-5, 3e-5),
+    "gpt-4-turbo-2024-04-09": (128000, 4096, 1e-5, 3e-5),
+    "gpt-4-turbo-preview": (128000, 4096, 1e-5, 3e-5),
+    "gpt-4.1": (1047576, 32768, 2e-6, 8e-6),
+    "gpt-4.1-2025-04-14": (1047576, 32768, 2e-6, 8e-6),
+    "gpt-4.1-mini": (1047576, 32768, 4e-7, 1.6e-6),
+    "gpt-4.1-mini-2025-04-14": (1047576, 32768, 4e-7, 1.6e-6),
+    "gpt-4.1-nano": (1047576, 32768, 1e-7, 4e-7),
+    "gpt-4.1-nano-2025-04-14": (1047576, 32768, 1e-7, 4e-7),
+    "gpt-4o": (128000, 4096, 2.5e-6, 1e-5),
+    "gpt-4o-2024-05-13": (128000, 4096, 5e-6, 1.5e-5),
+    "gpt-4o-2024-08-06": (128000, 16384, 2.5e-6, 1e-5),
+    "gpt-4o-2024-11-20": (128000, 16384, 2.5e-6, 1e-5),
+    "gpt-4o-mini": (128000, 16384, 1.5e-7, 6e-7),
+    "gpt-4o-mini-2024-07-18": (128000, 16384, 1.5e-7, 6e-7),
+    "gpt-4o-search-preview": (128000, 16384, 2.5e-6, 1e-5),
+    "gpt-4o-search-preview-2025-03-11": (128000, 16384, 2.5e-6, 1e-5),
+    "gpt-4o-mini-search-preview": (128000, 16384, 1.5e-7, 6e-7),
+    "gpt-4o-mini-search-preview-2025-03-11": (128000, 16384, 1.5e-7, 6e-7),
+    "gpt-5": (400000, 128000, 1.25e-6, 1e-5),
+    "gpt-5-2025-08-07": (400000, 128000, 1.25e-6, 1e-5),
+    "gpt-5-mini": (400000, 128000, 2.5e-7, 2e-6),
+    "gpt-5-mini-2025-08-07": (400000, 128000, 2.5e-7, 2e-6),
+    "gpt-5-nano": (400000, 128000, 5e-8, 4e-7),
+    "gpt-5-nano-2025-08-07": (400000, 128000, 5e-8, 4e-7),
+    "gpt-5-pro": (400000, 272000, None, None),
+    "gpt-5-pro-2025-10-06": (400000, 272000, None, None),
+    "gpt-5.1": (400000, 128000, 1.25e-6, 1e-5),
+    "gpt-5.1-2025-11-13": (400000, 128000, 1.25e-6, 1e-5),
+    "gpt-5.2": (400000, 128000, None, None),
+    "gpt-5.2-2025-12-11": (400000, 128000, None, None),
+    "gpt-5.2-pro": (400000, 272000, None, None),
+    "gpt-5.2-pro-2025-12-11": (400000, 272000, None, None),
+    "gpt-5.4": (400000, 128000, None, None),
+    "gpt-5.4-2026-03-05": (400000, 128000, None, None),
+    "gpt-5.4-mini": (400000, 128000, None, None),
+    "gpt-5.4-nano": (400000, 128000, None, None),
+    "gpt-5.4-pro": (400000, 272000, None, None),
+    "gpt-5.4-pro-2026-03-05": (400000, 272000, None, None),
+    "o1": (200000, 100000, 1.5e-5, 6e-5),
+    "o1-2024-12-17": (200000, 100000, 1.5e-5, 6e-5),
+    "o1-pro": (200000, 100000, 1.5e-4, 6e-4),
+    "o1-pro-2025-03-19": (200000, 100000, 1.5e-4, 6e-4),
+    "o3": (200000, 100000, 2e-6, 8e-6),
+    "o3-2025-04-16": (200000, 100000, 2e-6, 8e-6),
+    "o3-mini": (200000, 100000, 1.1e-6, 4.4e-6),
+    "o3-mini-2025-01-31": (200000, 100000, 1.1e-6, 4.4e-6),
+    "o3-pro": (200000, 100000, 2e-5, 8e-5),
+    "o3-pro-2025-06-10": (200000, 100000, 2e-5, 8e-5),
+    "o4-mini": (200000, 100000, 1.1e-6, 4.4e-6),
+    "o4-mini-2025-04-16": (200000, 100000, 1.1e-6, 4.4e-6),
+    "codex-mini-latest": (200000, 100000, 1.5e-6, 6e-6),
 }
 
 
@@ -267,12 +278,41 @@ def get_model_routing(model_id: str) -> dict:
     return {"provider": "openai", "bare_id": bare}
 
 
+def _lookup_info(model_id: str):
+    """Return the _MODEL_INFO tuple for a model_id, unwrapping a provider prefix.
+
+    Mirrors get_model_routing: an explicit "provider/model" prefix is unwrapped
+    first, then the bare ID is looked up. Returns None for unknown models.
+    """
+    bare = model_id.split("/", 1)[1] if "/" in model_id else model_id
+    return _MODEL_INFO.get(bare)
+
+
 def get_model_max_output_tokens(model_id: str) -> int | None:
     """Return the model's published max output tokens, or None if unknown.
 
-    Lookup mirrors get_model_routing: an explicit "provider/model" prefix is
-    unwrapped first, then the bare ID is looked up in _MODEL_MAX_OUTPUT_TOKENS.
     Unknown models return None so the caller's configured value is used as-is.
     """
-    bare = model_id.split("/", 1)[1] if "/" in model_id else model_id
-    return _MODEL_MAX_OUTPUT_TOKENS.get(bare)
+    info = _lookup_info(model_id)
+    return info[1] if info else None
+
+
+def get_model_context_window(model_id: str) -> int | None:
+    """Return the model's total context window (max input+output tokens), or None.
+
+    Used by the Layer-3 budget trimmer to size the context budget. Unknown models
+    return None so the caller falls back to compaction.default_context_window.
+    """
+    info = _lookup_info(model_id)
+    return info[0] if info else None
+
+
+def get_model_pricing(model_id: str) -> dict | None:
+    """Return {"input_cost_per_token", "output_cost_per_token"} (USD/token), or None.
+
+    Returns None when the model is unknown or pricing is not tracked for it.
+    """
+    info = _lookup_info(model_id)
+    if not info or info[2] is None:
+        return None
+    return {"input_cost_per_token": info[2], "output_cost_per_token": info[3]}
