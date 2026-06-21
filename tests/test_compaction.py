@@ -7,7 +7,6 @@ from smolagents.memory import ActionStep, Timing, TokenUsage
 
 from scripts import compaction as C
 
-
 # --- helpers ---------------------------------------------------------------
 
 

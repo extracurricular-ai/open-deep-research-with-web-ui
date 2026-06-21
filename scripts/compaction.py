@@ -453,9 +453,9 @@ def make_plan_consolidator(
             f"{consolidation}{sources_line}"
         )
         for i in action_indices[1:]:
-            agent.memory.steps[
-                i
-            ].observations = f"{CONSOLIDATED_PREFIX} into step {first_step_no}]"
+            agent.memory.steps[i].observations = (
+                f"{CONSOLIDATED_PREFIX} into step {first_step_no}]"
+            )
 
     return cb
 
