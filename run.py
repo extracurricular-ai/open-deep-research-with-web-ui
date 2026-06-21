@@ -611,6 +611,17 @@ def create_agent(cfg):
         # smolagents default). Force "auto" so ToolCallingAgent works.
         if routing["provider"] == "deepseek":
             model_params["tool_choice"] = "auto"
+        # OpenAI prompt caching is automatic for >=1024-token prefixes — no header
+        # exists. prompt_cache_key is an optional routing hint that pins this
+        # research session's requests to one backend, raising the cache-hit rate.
+        # Send it only to genuine OpenAI: DeepSeek and other OpenAI-compatible
+        # endpoints cache automatically and may 400 on an unknown body field.
+        # One run.py subprocess == one research session, so the PID keys per session.
+        # extra_body is the version-robust passthrough into chat.completions.create.
+        if routing["provider"] == "openai":
+            model_params["extra_body"] = {
+                "prompt_cache_key": f"odr-{routing['bare_id']}-{os.getpid()}"
+            }
         model = OpenAIServerModel(**model_params)
 
     model = _patch_model_retrier(model, cfg)
