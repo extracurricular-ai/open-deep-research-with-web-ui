@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
 
-**Official search support:** <a href="https://duckduckgo.com/"><img src="https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png" height="22" alt="DuckDuckGo" /></a>
+**Official search support:** <a href="https://duckduckgo.com/"><img src="https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png" height="22" alt="DuckDuckGo" /></a> <a href="https://open.bochaai.com/"><img src="https://open.bochaai.com/favicon.ico" height="22" alt="Bocha" /></a>
 
 > **Read this in other languages:** 🇨🇳 [中文](docs/README_zh.md) · 🇫🇷 [Français](docs/README_fr.md) · 🇪🇸 [Español](docs/README_es.md)
 
