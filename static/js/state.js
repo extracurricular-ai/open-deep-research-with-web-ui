@@ -8,6 +8,10 @@
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
 
+// Session statuses eligible for warm-restart resume (mirror of
+// db.RESUMABLE_STATUSES on the backend — keep the two in sync).
+export const RESUMABLE_STATUSES = ['interrupted', 'stopped', 'failed'];
+
 // ===== Store =====
 const state = {
     events: [],
@@ -1007,6 +1011,9 @@ export async function deleteSession(sessionId) {
 }
 
 export async function resumeSession(sessionId) {
+    // In live mode while running, block resume — loadSession() below would
+    // early-return on the same guard and leave the UI detached from any stream.
+    if (state.isRunning && state.runMode === 'live') return;
     setState({ status: { message: 'Resuming session...', type: 'loading' } });
     try {
         const response = await fetch(`/api/sessions/${sessionId}/resume`, {

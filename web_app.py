@@ -214,13 +214,10 @@ def background_worker(session_id, output_queue, process):
             # Only mark completed if not already stopped/interrupted
             status_info = get_session_status(session_id)
             if status_info and status_info["status"] == "running":
-                # Determine if the agent crashed: non-zero exit without a final answer
+                # A crash is a non-zero exit with no final answer; otherwise the
+                # run completed (with or without an answer).
                 rc = process.returncode
-                if session_final_answer:
-                    complete_session(
-                        session_id, final_answer=session_final_answer, status="completed"
-                    )
-                elif rc and rc != 0:
+                if not session_final_answer and rc and rc != 0:
                     complete_session(session_id, status="failed")
                 else:
                     complete_session(
@@ -1078,14 +1075,23 @@ def api_resume_session(session_id):
     """Resume a failed/interrupted/stopped session via warm restart.
 
     Reopens the same session and spawns a new agent run that injects prior
-    findings as context, continuing research without repeating completed work."""
+    findings as context, continuing research without repeating completed work.
+    Admission goes through the same MAX_CONCURRENT gate as a normal run: at
+    capacity the session is re-queued and promoted by the dispatcher later."""
     try:
         original = get_session_for_resume(session_id)
         if not original:
             return jsonify({"error": "Session not found or not in a resumable state"}), 400
 
-        if not reopen_session_for_resume(session_id):
+        decision = reopen_session_for_resume(session_id, MAX_CONCURRENT)
+        if decision is None:
             return jsonify({"error": "Session could not be reopened (status may have changed)"}), 409
+
+        # At capacity: the row is now 'queued' with the resume marker persisted;
+        # dispatch_pending() will spawn it (with --resume-session-id) when a slot
+        # frees. Nothing to launch right now.
+        if decision == "queued":
+            return jsonify({"session_id": session_id, "status": "queued"})
 
         question = original["question"]
         model_id = original["model_id"]
@@ -1097,10 +1103,21 @@ def api_resume_session(session_id):
                 pass
 
         run_mode = "background"
-        spawn_session(
-            session_id, question, model_id, run_mode, client_config,
-            resume_session_id=session_id,
-        )
+        try:
+            spawn_session(
+                session_id, question, model_id, run_mode, client_config,
+                resume_session_id=session_id,
+            )
+        except Exception as spawn_err:
+            # Release the slot we just claimed so the gate/queue stay correct,
+            # mirroring dispatch_pending()'s spawn-failure handling.
+            try:
+                fail_stale_session(session_id)
+                dispatch_pending()
+            except Exception:
+                pass
+            return jsonify({"error": f"Failed to start resume: {spawn_err}"}), 500
+
         return jsonify({"session_id": session_id, "status": "running"})
 
     except Exception as e:

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import {
     useStore, setState,
     startStream, stopStream, newSession, setRunMode, discoverModels, resumeSession,
+    RESUMABLE_STATUSES,
 } from '../state.js';
 import { StatusBar } from './StatusBar.js';
 
@@ -90,7 +91,7 @@ export function InputPanel() {
                     Viewing saved session
                     ${(() => {
                         const s = store.sessions.find(x => x.id === store.activeSessionId);
-                        const resumable = s && ['interrupted', 'stopped', 'failed'].includes(s.status);
+                        const resumable = s && RESUMABLE_STATUSES.includes(s.status);
                         return resumable && html`
                             <button class="btn btn-submit btn-sm" onClick=${() => resumeSession(store.activeSessionId)}>Resume</button>
                         `;

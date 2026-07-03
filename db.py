@@ -346,20 +346,55 @@ def get_session_status(session_id):
 RESUMABLE_STATUSES = ("interrupted", "stopped", "failed")
 
 
-def reopen_session_for_resume(session_id):
-    """Reset a terminal session back to 'running' for warm-restart resume.
+def reopen_session_for_resume(session_id, max_concurrent):
+    """Reopen a terminal session for warm-restart resume, respecting the gate.
 
-    Only transitions from a resumable status. Returns True if successful.
+    Atomically re-admits a resumable session through the same MAX_CONCURRENT gate
+    as a fresh run: under capacity it goes straight to 'running' (the caller
+    spawns now); at capacity it is re-queued and dispatch_pending() promotes it
+    later, carrying the resume marker in client_config so the promoted run
+    injects prior findings via --resume-session-id.
+
+    Returns the new status ('running' or 'queued'), or None if the session was
+    not in a resumable state (e.g. it lost the race to a concurrent transition).
     """
-    with get_connection() as conn:
-        cursor = conn.execute(
-            "UPDATE sessions SET status = 'running', completed_at = NULL, "
-            "started_at = datetime('now') "
-            "WHERE id = ? AND status IN ('interrupted', 'stopped', 'failed')",
-            (session_id,),
+    placeholders = ", ".join("?" for _ in RESUMABLE_STATUSES)
+    with immediate_transaction() as conn:
+        row = conn.execute(
+            f"SELECT client_config FROM sessions "
+            f"WHERE id = ? AND status IN ({placeholders})",
+            (session_id, *RESUMABLE_STATUSES),
+        ).fetchone()
+        if not row:
+            return None
+
+        running = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE status = 'running'"
+        ).fetchone()[0]
+
+        if running < max_concurrent:
+            conn.execute(
+                "UPDATE sessions SET status = 'running', completed_at = NULL, "
+                "started_at = datetime('now') WHERE id = ?",
+                (session_id,),
+            )
+            return "running"
+
+        # At capacity: re-queue and stash the resume marker so dispatch_pending()
+        # re-spawns this row with --resume-session-id when a slot frees.
+        try:
+            cfg = json.loads(row["client_config"]) if row["client_config"] else {}
+            if not isinstance(cfg, dict):
+                cfg = {}
+        except (ValueError, TypeError):
+            cfg = {}
+        cfg["_resume_session_id"] = session_id
+        conn.execute(
+            "UPDATE sessions SET status = 'queued', completed_at = NULL, "
+            "started_at = NULL, client_config = ? WHERE id = ?",
+            (json.dumps(cfg), session_id),
         )
-        conn.commit()
-        return cursor.rowcount > 0
+        return "queued"
 
 
 def get_max_event_order(session_id):
@@ -374,9 +409,12 @@ def get_max_event_order(session_id):
 
 
 def get_session_for_resume(session_id):
-    """Fetch session metadata and events needed for warm-restart resume.
+    """Fetch session metadata needed for warm-restart resume.
 
-    Returns None if the session doesn't exist or isn't in a resumable state.
+    Returns None if the session doesn't exist or isn't in a resumable state. The
+    event stream itself is intentionally NOT loaded here: the resumed run.py
+    subprocess re-reads and extracts it via build_resume_context(), so parsing it
+    on the request thread would be duplicated work that scales with history size.
     """
     with get_connection() as conn:
         row = conn.execute(
@@ -386,15 +424,9 @@ def get_session_for_resume(session_id):
         if not row or row["status"] not in RESUMABLE_STATUSES:
             return None
 
-        events = conn.execute(
-            "SELECT event_data FROM events WHERE session_id = ? ORDER BY event_order",
-            (session_id,),
-        ).fetchall()
-
         return {
             "question": row["question"],
             "model_id": row["model_id"],
             "status": row["status"],
             "client_config": row["client_config"],
-            "events": [json.loads(e["event_data"]) for e in events],
         }

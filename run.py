@@ -446,7 +446,8 @@ def build_resume_context(session_id, max_chars=16000):
             (session_id,),
         ).fetchall()
         conn.close()
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(f"build_resume_context: failed to read prior events: {e}\n")
         return ""
 
     if not rows:
@@ -505,17 +506,24 @@ def build_resume_context(session_id, max_chars=16000):
     context = "\n".join(parts)
 
     if len(context) > max_chars:
-        # Keep header + plan, truncate findings from the oldest
-        header_end = context.find("--- Key Findings ---")
-        if header_end > 0:
-            header_part = context[:header_end + len("--- Key Findings ---")]
+        # Keep the header/instructions (+ plan if present) and drop findings from
+        # the oldest end — the most recent steps are the most useful to resume
+        # from. Anchor on the Findings section header that is actually emitted
+        # above; fall back to a hard slice if it isn't present (e.g. a plan-only
+        # context with no findings).
+        marker = "--- Completed Research Findings ---"
+        header_end = context.find(marker)
+        if header_end >= 0:
+            header_part = context[: header_end + len(marker)]
             footer = "\n=== END PRIOR FINDINGS ==="
             budget = max_chars - len(header_part) - len(footer) - 50
             # Take findings from the end (most recent)
             findings_text = "\n".join(findings)
-            if len(findings_text) > budget:
+            if budget > 0 and len(findings_text) > budget:
                 findings_text = "[... earlier findings truncated ...]\n" + findings_text[-budget:]
             context = header_part + "\n" + findings_text + footer
+        else:
+            context = context[:max_chars]
 
     return context
 
@@ -929,6 +937,11 @@ def main():
         resume_context = build_resume_context(args.resume_session_id, max_chars=max_ctx)
         if resume_context:
             question = resume_context + "\n\n" + question
+        else:
+            sys.stderr.write(
+                f"resume: no prior findings extracted for session "
+                f"{args.resume_session_id}; running the question from scratch\n"
+            )
 
     agent.run(question)
 
