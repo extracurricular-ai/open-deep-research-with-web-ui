@@ -221,7 +221,9 @@ def background_worker(session_id, output_queue, process):
                     complete_session(session_id, status="failed")
                 else:
                     complete_session(
-                        session_id, final_answer=session_final_answer, status="completed"
+                        session_id,
+                        final_answer=session_final_answer,
+                        status="completed",
                     )
         except Exception:
             pass
@@ -416,7 +418,9 @@ def build_config_json(model_id, client_config):
     return json.dumps(_deep_merge(server_cfg, override))
 
 
-def spawn_session(session_id, question, model_id, run_mode, client_config, resume_session_id=None):
+def spawn_session(
+    session_id, question, model_id, run_mode, client_config, resume_session_id=None
+):
     """Start the agent subprocess for a session whose DB row is already 'running'.
 
     Launches run.py, registers the process in this worker's active_sessions and
@@ -1081,11 +1085,19 @@ def api_resume_session(session_id):
     try:
         original = get_session_for_resume(session_id)
         if not original:
-            return jsonify({"error": "Session not found or not in a resumable state"}), 400
+            return (
+                jsonify({"error": "Session not found or not in a resumable state"}),
+                400,
+            )
 
         decision = reopen_session_for_resume(session_id, MAX_CONCURRENT)
         if decision is None:
-            return jsonify({"error": "Session could not be reopened (status may have changed)"}), 409
+            return (
+                jsonify(
+                    {"error": "Session could not be reopened (status may have changed)"}
+                ),
+                409,
+            )
 
         # At capacity: the row is now 'queued' with the resume marker persisted;
         # dispatch_pending() will spawn it (with --resume-session-id) when a slot
@@ -1105,7 +1117,11 @@ def api_resume_session(session_id):
         run_mode = "background"
         try:
             spawn_session(
-                session_id, question, model_id, run_mode, client_config,
+                session_id,
+                question,
+                model_id,
+                run_mode,
+                client_config,
                 resume_session_id=session_id,
             )
         except Exception as spawn_err:

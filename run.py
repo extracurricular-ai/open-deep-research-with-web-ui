@@ -664,8 +664,7 @@ def build_resume_context(session_id, question, summarizer_model, cfg):
     led = _ledger(ledger_holder)
     table_cap = max(1, cmp_cfg.get("ledger_max_entries", 200))
     source_table = "\n".join(
-        f"[S{e['id']}] = {e['url']}"
-        for e in list(led["by_url"].values())[:table_cap]
+        f"[S{e['id']}] = {e['url']}" for e in list(led["by_url"].values())[:table_cap]
     )
 
     # 3) Compress: small findings inject raw; large ones go through the summarizer
