@@ -8,6 +8,10 @@
  */
 import { useState, useEffect, useRef } from 'preact/hooks';
 
+// Session statuses eligible for warm-restart resume (mirror of
+// db.RESUMABLE_STATUSES on the backend — keep the two in sync).
+export const RESUMABLE_STATUSES = ['interrupted', 'stopped', 'failed'];
+
 // ===== Store =====
 const state = {
     events: [],
@@ -1003,6 +1007,32 @@ export async function deleteSession(sessionId) {
         }
     } catch (e) {
         console.error('Failed to delete session:', e);
+    }
+}
+
+export async function resumeSession(sessionId) {
+    // In live mode while running, block resume — loadSession() below would
+    // early-return on the same guard and leave the UI detached from any stream.
+    if (state.isRunning && state.runMode === 'live') return;
+    setState({ status: { message: 'Resuming session...', type: 'loading' } });
+    try {
+        const response = await fetch(`/api/sessions/${sessionId}/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: 'Resume failed' }));
+            setState({ status: { message: `Resume failed: ${err.error}`, type: 'error' } });
+            return;
+        }
+
+        // Session is now running again with the same ID — reload it
+        setState({ activeSessionId: null, viewingHistory: false });
+        await loadSessions();
+        await loadSession(sessionId);
+    } catch (e) {
+        setState({ status: { message: `Resume error: ${e.message}`, type: 'error' } });
     }
 }
 

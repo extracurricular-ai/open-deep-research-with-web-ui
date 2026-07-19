@@ -38,6 +38,9 @@ from db import (
     get_running_sessions,
     fail_stale_session,
     cancel_queued_session,
+    get_session_for_resume,
+    reopen_session_for_resume,
+    get_max_event_order,
 )
 from config import load_config, save_config, _deep_merge
 
@@ -179,7 +182,7 @@ def drain_stderr(process, queue, stderr_done_event):
 def background_worker(session_id, output_queue, process):
     """Read subprocess output and persist to DB, independent of any HTTP connection.
     Runs in a daemon thread. Cleans up session file when subprocess ends."""
-    event_counter = 0
+    event_counter = get_max_event_order(session_id) + 1
     session_final_answer = None
 
     try:
@@ -211,9 +214,17 @@ def background_worker(session_id, output_queue, process):
             # Only mark completed if not already stopped/interrupted
             status_info = get_session_status(session_id)
             if status_info and status_info["status"] == "running":
-                complete_session(
-                    session_id, final_answer=session_final_answer, status="completed"
-                )
+                # A crash is a non-zero exit with no final answer; otherwise the
+                # run completed (with or without an answer).
+                rc = process.returncode
+                if not session_final_answer and rc and rc != 0:
+                    complete_session(session_id, status="failed")
+                else:
+                    complete_session(
+                        session_id,
+                        final_answer=session_final_answer,
+                        status="completed",
+                    )
         except Exception:
             pass
 
@@ -407,7 +418,9 @@ def build_config_json(model_id, client_config):
     return json.dumps(_deep_merge(server_cfg, override))
 
 
-def spawn_session(session_id, question, model_id, run_mode, client_config):
+def spawn_session(
+    session_id, question, model_id, run_mode, client_config, resume_session_id=None
+):
     """Start the agent subprocess for a session whose DB row is already 'running'.
 
     Launches run.py, registers the process in this worker's active_sessions and
@@ -421,8 +434,11 @@ def spawn_session(session_id, question, model_id, run_mode, client_config):
     output_queue: Queue = Queue()
 
     env = os.environ.copy()
+    cmd = [sys.executable, "-u", "run.py", question, "--config-json", config_json_str]
+    if resume_session_id:
+        cmd.extend(["--resume-session-id", resume_session_id])
     process = subprocess.Popen(
-        [sys.executable, "-u", "run.py", question, "--config-json", config_json_str],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
@@ -471,6 +487,9 @@ def dispatch_pending():
                     client_config = json.loads(row["client_config"])
                 except (ValueError, TypeError):
                     client_config = None
+            resume_session_id = None
+            if client_config and "_resume_session_id" in client_config:
+                resume_session_id = client_config.pop("_resume_session_id")
             try:
                 spawn_session(
                     row["id"],
@@ -478,6 +497,7 @@ def dispatch_pending():
                     row["model_id"],
                     row["run_mode"] or "background",
                     client_config,
+                    resume_session_id=resume_session_id,
                 )
             except Exception as spawn_err:
                 print(f"Dispatch: failed to spawn {row['id']}: {spawn_err}")
@@ -1050,6 +1070,72 @@ def api_delete_session(session_id):
         if in_flight:
             dispatch_pending()
         return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/<session_id>/resume", methods=["POST"])
+def api_resume_session(session_id):
+    """Resume a failed/interrupted/stopped session via warm restart.
+
+    Reopens the same session and spawns a new agent run that injects prior
+    findings as context, continuing research without repeating completed work.
+    Admission goes through the same MAX_CONCURRENT gate as a normal run: at
+    capacity the session is re-queued and promoted by the dispatcher later."""
+    try:
+        original = get_session_for_resume(session_id)
+        if not original:
+            return (
+                jsonify({"error": "Session not found or not in a resumable state"}),
+                400,
+            )
+
+        decision = reopen_session_for_resume(session_id, MAX_CONCURRENT)
+        if decision is None:
+            return (
+                jsonify(
+                    {"error": "Session could not be reopened (status may have changed)"}
+                ),
+                409,
+            )
+
+        # At capacity: the row is now 'queued' with the resume marker persisted;
+        # dispatch_pending() will spawn it (with --resume-session-id) when a slot
+        # frees. Nothing to launch right now.
+        if decision == "queued":
+            return jsonify({"session_id": session_id, "status": "queued"})
+
+        question = original["question"]
+        model_id = original["model_id"]
+        client_config = None
+        if original.get("client_config"):
+            try:
+                client_config = json.loads(original["client_config"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        run_mode = "background"
+        try:
+            spawn_session(
+                session_id,
+                question,
+                model_id,
+                run_mode,
+                client_config,
+                resume_session_id=session_id,
+            )
+        except Exception as spawn_err:
+            # Release the slot we just claimed so the gate/queue stay correct,
+            # mirroring dispatch_pending()'s spawn-failure handling.
+            try:
+                fail_stale_session(session_id)
+                dispatch_pending()
+            except Exception:
+                pass
+            return jsonify({"error": f"Failed to start resume: {spawn_err}"}), 500
+
+        return jsonify({"session_id": session_id, "status": "running"})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -1,5 +1,5 @@
 import { html } from '../htm.js';
-import { useStore, loadSession, deleteSession, newSession, toggleSidebar, isSessionLive } from '../state.js';
+import { useStore, loadSession, deleteSession, resumeSession, newSession, toggleSidebar, isSessionLive, RESUMABLE_STATUSES } from '../state.js';
 
 function formatDate(isoString) {
     if (!isoString) return '';
@@ -83,6 +83,14 @@ export function Sidebar() {
                                 ${statusIcon(s.status)}
                             </span>
                             <span class="sidebar-item-question">${s.question}</span>
+                            ${RESUMABLE_STATUSES.includes(s.status) && html`
+                                <button
+                                    class="sidebar-item-resume"
+                                    onClick=${(e) => { e.stopPropagation(); resumeSession(s.id); }}
+                                    aria-label="Resume session"
+                                    title="Resume from where it left off"
+                                >\u21bb</button>
+                            `}
                             <button
                                 class="sidebar-item-delete"
                                 onClick=${(e) => onDelete(e, s.id)}

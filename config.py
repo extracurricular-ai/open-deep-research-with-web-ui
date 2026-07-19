@@ -89,6 +89,23 @@ DEFAULTS = {
         # Token cap on the rendered ledger block (titles dropped, then truncated).
         "ledger_render_max_tokens": 4000,
     },
+    "resume": {
+        # Warm-restart resume. Prior findings from an interrupted session are
+        # reconstructed, URL-harvested into a source ledger, LLM-summarized (reusing
+        # compaction.summarizer_model_id), and injected into a fresh run. See
+        # build_resume_context in run.py. All limits are default + floor, never a
+        # hard ceiling; token counts use tiktoken.
+        # Below this many tokens, inject the reconstructed findings raw and skip the
+        # summarizer call entirely — a small session needs no compression.
+        "summarize_threshold_tokens": 4000,
+        # Reserve subtracted from the SUMMARIZER model's window when trimming the
+        # raw findings to fit as summarizer input (keeps the summarize call itself
+        # from overflowing). Summary output length is the model's own max_output.
+        "summarizer_input_reserve_tokens": 20000,
+        # Reserve subtracted from the RESUMED model's window to bound the injected
+        # context, leaving room for continued research + the final report.
+        "inject_reserve_tokens": 40000,
+    },
     "other_keys": {
         "hf_token": "",
     },

@@ -2,7 +2,8 @@ import { html } from '../htm.js';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import {
     useStore, setState,
-    startStream, stopStream, newSession, setRunMode, discoverModels,
+    startStream, stopStream, newSession, setRunMode, discoverModels, resumeSession,
+    RESUMABLE_STATUSES,
 } from '../state.js';
 import { StatusBar } from './StatusBar.js';
 
@@ -88,6 +89,13 @@ export function InputPanel() {
             ${store.viewingHistory && html`
                 <div class="history-badge">
                     Viewing saved session
+                    ${(() => {
+                        const s = store.sessions.find(x => x.id === store.activeSessionId);
+                        const resumable = s && RESUMABLE_STATUSES.includes(s.status);
+                        return resumable && html`
+                            <button class="btn btn-submit btn-sm" onClick=${() => resumeSession(store.activeSessionId)}>Resume</button>
+                        `;
+                    })()}
                     <button class="btn btn-ghost btn-sm" onClick=${newSession}>New Session</button>
                 </div>
             `}

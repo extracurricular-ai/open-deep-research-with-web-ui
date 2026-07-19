@@ -341,3 +341,92 @@ def get_session_status(session_id):
             (session_id,),
         ).fetchone()
         return dict(row) if row else None
+
+
+RESUMABLE_STATUSES = ("interrupted", "stopped", "failed")
+
+
+def reopen_session_for_resume(session_id, max_concurrent):
+    """Reopen a terminal session for warm-restart resume, respecting the gate.
+
+    Atomically re-admits a resumable session through the same MAX_CONCURRENT gate
+    as a fresh run: under capacity it goes straight to 'running' (the caller
+    spawns now); at capacity it is re-queued and dispatch_pending() promotes it
+    later, carrying the resume marker in client_config so the promoted run
+    injects prior findings via --resume-session-id.
+
+    Returns the new status ('running' or 'queued'), or None if the session was
+    not in a resumable state (e.g. it lost the race to a concurrent transition).
+    """
+    placeholders = ", ".join("?" for _ in RESUMABLE_STATUSES)
+    with immediate_transaction() as conn:
+        row = conn.execute(
+            f"SELECT client_config FROM sessions "
+            f"WHERE id = ? AND status IN ({placeholders})",
+            (session_id, *RESUMABLE_STATUSES),
+        ).fetchone()
+        if not row:
+            return None
+
+        running = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE status = 'running'"
+        ).fetchone()[0]
+
+        if running < max_concurrent:
+            conn.execute(
+                "UPDATE sessions SET status = 'running', completed_at = NULL, "
+                "started_at = datetime('now') WHERE id = ?",
+                (session_id,),
+            )
+            return "running"
+
+        # At capacity: re-queue and stash the resume marker so dispatch_pending()
+        # re-spawns this row with --resume-session-id when a slot frees.
+        try:
+            cfg = json.loads(row["client_config"]) if row["client_config"] else {}
+            if not isinstance(cfg, dict):
+                cfg = {}
+        except (ValueError, TypeError):
+            cfg = {}
+        cfg["_resume_session_id"] = session_id
+        conn.execute(
+            "UPDATE sessions SET status = 'queued', completed_at = NULL, "
+            "started_at = NULL, client_config = ? WHERE id = ?",
+            (json.dumps(cfg), session_id),
+        )
+        return "queued"
+
+
+def get_max_event_order(session_id):
+    """Return the highest event_order for a session, or -1 if no events exist."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT MAX(event_order) as max_order FROM events WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        val = row["max_order"] if row else None
+        return val if val is not None else -1
+
+
+def get_session_for_resume(session_id):
+    """Fetch session metadata needed for warm-restart resume.
+
+    Returns None if the session doesn't exist or isn't in a resumable state. The
+    event stream itself is intentionally NOT loaded here: the resumed run.py
+    subprocess re-reads and extracts it via build_resume_context(), so parsing it
+    on the request thread would be duplicated work that scales with history size.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT question, model_id, status, client_config FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if not row or row["status"] not in RESUMABLE_STATUSES:
+            return None
+
+        return {
+            "question": row["question"],
+            "model_id": row["model_id"],
+            "status": row["status"],
+            "client_config": row["client_config"],
+        }
