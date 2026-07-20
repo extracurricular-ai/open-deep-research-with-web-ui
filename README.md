@@ -1,4 +1,7 @@
-# Open Deep Research
+<div align="center">
+  <img src="docs/imgs/open-deep-research-logo.png" alt="Open Deep Research logo" width="180" />
+  <h1>Open Deep Research</h1>
+</div>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
