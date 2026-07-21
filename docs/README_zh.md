@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/extracurricular-ai/open-deep-research-with-web-ui)
 
 **官方搜索支持：** <a href="https://duckduckgo.com/"><img src="https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png" height="22" alt="DuckDuckGo" /></a>
 
@@ -84,7 +84,7 @@
 
 ## 为什么选择本项目？
 
-- **一行 Docker 命令即装即用，无需配置** —— `docker run -p 5080:5080 ghcr.io/s2thend/open-deep-research-with-ui:latest` 启动后立即可用。DuckDuckGo 搜索内置，只需一个模型 API 密钥即可开始研究。
+- **一行 Docker 命令即装即用，无需配置** —— `docker run -p 5080:5080 ghcr.io/extracurricular-ai/open-deep-research-with-web-ui:latest` 启动后立即可用。DuckDuckGo 搜索内置，只需一个模型 API 密钥即可开始研究。
 
 - **不依赖 LiteLLM** —— 仅直接调用 OpenAI + Anthropic 官方 SDK。移除了 LiteLLM 这个反复出现安全公告的中间翻译层。对企业 / 内网部署更安全。
 
@@ -122,8 +122,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/S2thend/open-deep-research-with-ui.git
-cd open-deep-research-with-ui
+git clone https://github.com/extracurricular-ai/open-deep-research-with-web-ui.git
+cd open-deep-research-with-web-ui
 ```
 
 ### 2. 安装系统依赖
@@ -400,14 +400,14 @@ python run_gaia.py --model-id "o1" --run-name my-run
 **预构建镜像**可在 GitHub Container Registry 获取：
 
 ```bash
-docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
+docker pull ghcr.io/extracurricular-ai/open-deep-research-with-web-ui:latest
 
 docker run -d \
   --env-file .env \
   -v ./odr-config.json:/app/odr-config.json \
   -p 5080:5080 \
   --name open-deep-research \
-  ghcr.io/s2thend/open-deep-research-with-ui:latest
+  ghcr.io/extracurricular-ai/open-deep-research-with-web-ui:latest
 ```
 
 **Docker Compose**（包含下载文件的挂载卷）：

@@ -5,7 +5,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/s2thend/open-deep-research-with-ui)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue)](https://ghcr.io/extracurricular-ai/open-deep-research-with-web-ui)
 
 **Official search support:** <a href="https://duckduckgo.com/"><img src="https://duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png" height="22" alt="DuckDuckGo" /></a> <a href="https://open.bochaai.com/"><img src="https://open.bochaai.com/favicon.ico" height="22" alt="Bocha" /></a>
 
@@ -89,7 +89,7 @@ This is particularly useful for:
 
 ## Why This Project?
 
-- **One-command Docker install, zero config to start** — `docker run -p 5080:5080 ghcr.io/s2thend/open-deep-research-with-ui:latest` and a working web UI is up. DuckDuckGo search is built-in; one model API key is enough to begin.
+- **One-command Docker install, zero config to start** — `docker run -p 5080:5080 ghcr.io/extracurricular-ai/open-deep-research-with-web-ui:latest` and a working web UI is up. DuckDuckGo search is built-in; one model API key is enough to begin.
 
 - **No LiteLLM dependency** — direct OpenAI + Anthropic SDK calls only. Removes the intermediary translation layer that LiteLLM has had repeated security advisories for. Safer for enterprise / internal deployments.
 
@@ -127,8 +127,8 @@ This is particularly useful for:
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/S2thend/open-deep-research-with-ui.git
-cd open-deep-research-with-ui
+git clone https://github.com/extracurricular-ai/open-deep-research-with-web-ui.git
+cd open-deep-research-with-web-ui
 ```
 
 ### 2. Install system dependencies
@@ -407,14 +407,14 @@ python run_gaia.py --model-id "o1" --run-name my-run
 **Pre-built images** are available on GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/s2thend/open-deep-research-with-ui:latest
+docker pull ghcr.io/extracurricular-ai/open-deep-research-with-web-ui:latest
 
 docker run -d \
   --env-file .env \
   -v ./odr-config.json:/app/odr-config.json \
   -p 5080:5080 \
   --name open-deep-research \
-  ghcr.io/s2thend/open-deep-research-with-ui:latest
+  ghcr.io/extracurricular-ai/open-deep-research-with-web-ui:latest
 ```
 
 **Docker Compose** (includes volume for downloaded files):
